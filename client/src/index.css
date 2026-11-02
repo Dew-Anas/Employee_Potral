@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+
+@theme {
+
+  --font-sans: "Manrope", sans-serif;
+  --font-heading: "Bricolage Grotesque", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-navy: #F1F5F9;
+  --color-teal: #35B9A5;
+  --color-page: #0B1624;
+  --color-ink: #F1F5F9;
+  --color-muted: #9AAEC2;
+  --color-line: #293D53;
+
+  --color-surface: #142438;
+  --color-elevated: #1B3048;
+  --color-primary: #3478F6;
+}
+
+:root {
+  color-scheme: dark;
+  font-family: "Manrope", sans-serif;
+  color: #F1F5F9;
+  background: #0B1624;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #0B1624;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
