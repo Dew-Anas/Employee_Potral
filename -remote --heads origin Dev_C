@@ -1,0 +1,20 @@
+* [33m131b924[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mDev_C[m[33m, [m[1;31morigin/Dev_C[m[33m, [m[1;31memployee-portal/HEAD[m[33m, [m[1;31memployee-portal/Dev_C[m[33m)[m Add profile name update UI with AuthContext updateUser & change-password form to Profile
+* [33m8c28e84[m Work Setup And Dashbord create
+[31m|[m * [33mbcde1e5[m[33m ([m[1;31morigin/Dev_B[m[33m)[m feat: payments API, customer booking/invoice endpoints, invoice admin UI with print
+[31m|[m * [33mde8f1b8[m feat: booking calendar UI with scheduling, assignment, reassign, cancel; booking rule fixes
+[31m|[m * [33mb9483c7[m feat: SOP templates admin UI, API validation, data-driven admin navigation
+[31m|[m * [33m94aee63[m feat: admin users management UI - list, filters, add employee, skills, activate/deactivate
+[31m|[m * [33m0d3a983[m style: new brand logo, gradient cards, status colors for admin portal
+[31m|[m * [33m3ea8a96[m fix: add jsonwebtoken and bcryptjs to server dependencies
+[31m|[m * [33m246c9a2[m feat: admin client foundation - api service, AuthContext, protected routes
+[31m|[m * [33m0f54cd8[m fix: install tailwindcss + @tailwindcss/vite, sync vite.config.js to match Dev A's setup
+[31m|[m * [33mad28df8[m feat: scaffold admin client app with Vite + React, matching Dev A's stack
+[31m|[m * [33m7fcc916[m chore: sync design tokens and shared UI components from Dev A for visual consistency
+[31m|[m * [33md701b9d[m feat: invoice generation service (createInvoiceFromBooking) + basic invoice list/detail API (B-18)
+[31m|[m * [33m9a2309d[m feat: booking admin ops - reassign, cancel, manual status override, all audit-logged (B-17)
+[31m|[m * [33m60d9048[m feat: scheduling + conflict detection + SOP task copy on assignment (B-13)
+[31m|[m * [33mf8514c9[m feat: booking service function (createBookingFromQuote) + basic booking list/detail API (B-12, B-14 partial)
+[31m|[m * [33ma6ddebc[m feat: quotation API - create/edit draft, send, auto-expiry job (B-09)
+[31m|[m * [33m573c612[m feat: audit log viewer API with filters and pagination (B-07)
+[31m|[m * [33m8bf81bb[m feat: SOP checklist template management - one template per category (B-06)
+[31m|[m * [33mcc06a16[m feat: admin user management API - create/manage employees, skills, status toggle (B05)

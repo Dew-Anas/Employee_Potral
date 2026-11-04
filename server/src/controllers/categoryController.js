@@ -6,7 +6,7 @@ const getCategories =async(req,res)=>{
         .select("name")
         .sort("name");
 
-        return res.status(200).json({ succes:true, categories });
+        return res.status(200).json({ success:true, categories });
 
     } catch(err){
         console.error("Get Categories error:",err.message);

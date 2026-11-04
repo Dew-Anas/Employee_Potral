@@ -32,4 +32,4 @@ const uploadRegistrationFiles=(req,res,next)=>{
     });
 };
 
-module.expors ={uploadRegistrationFiles};
+module.exports ={uploadRegistrationFiles};

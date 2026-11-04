@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route,Outlet } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
 import EmployeeNavigation from "./components/layout/EmployeeNavigation";
@@ -7,6 +8,8 @@ import JobDetails from "./pages/Jobs/JobDetails";
 import Login from "./pages/Auth/Login";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import Profile from "./pages/Profile/Profile";
+import Register from "./pages/Auth/Register";
+
 
 function EmployeeLayout() {
   return (
@@ -21,11 +24,13 @@ function EmployeeLayout() {
 
 function App() {
   return (
+    <ThemeProvider>
     <BrowserRouter>
       <Routes>
         
         <Route path="/login" element={<Login />} />
 
+        <Route path="/register" element={<Register />} />
         
         <Route element={<ProtectedRoute />}>
           <Route element={<EmployeeLayout />}>
@@ -41,6 +46,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

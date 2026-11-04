@@ -5,8 +5,12 @@ import {
   LuLayoutDashboard,
   LuClipboardList,
   LuClock,
-  LuUserRound
+  LuUserRound,
+  LuSun,
+  LuMoon
 } from "react-icons/lu";
+
+import { useTheme } from "../../context/ThemeContext";
 
 function EmployeeNavigation() {
   const navigationItems = [
@@ -32,6 +36,8 @@ function EmployeeNavigation() {
       icon: LuUserRound
     }
   ];
+
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface/95 px-3 pb-safe pt-2 backdrop-blur-xl">
@@ -63,6 +69,19 @@ function EmployeeNavigation() {
             </NavLink>
           );
         })}
+
+          <button
+  type="button"
+  onClick={toggleTheme}
+  aria-label="Toggle theme"
+  className="flex min-w-16 flex-col items-center gap-1 rounded-xl px-3 py-2 text-muted transition-all hover:bg-elevated hover:text-ink"
+>
+  {theme === "dark" ? <LuSun size={21} /> : <LuMoon size={21} />}
+
+  <span className="text-[10px] font-semibold">
+    {theme === "dark" ? "Light" : "Dark"}
+  </span>
+</button>
 
       </div>
 

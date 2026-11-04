@@ -1,6 +1,8 @@
 
-import { Link } from "react-router-dom";
+import { Link,useNavigate } from "react-router-dom";
 import JobSummary from "../../components/common/JobSummary";
+
+
 
 import {
   LuBriefcaseBusiness,
@@ -15,6 +17,7 @@ import {
 } from "react-icons/lu";
 
 function Dashboard() {
+  const navigate = useNavigate();
   return (
     <main className="min-h-screen bg-page px-4 pb-28 pt-5 text-ink sm:px-6 sm:pt-8 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -53,7 +56,10 @@ function Dashboard() {
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary ring-2 ring-surface" />
             </button>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-elevated text-primary">
+            <div 
+            onClick={() => navigate("/profile")}
+            
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-elevated text-primary">
               <LuUserRound size={20} />
             </div>
           </div>

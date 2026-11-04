@@ -6,6 +6,9 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const registrationRoutes = require("./routes/registrationRoutes");
+const Attendance = require("./models/Attendance");
+
+const attendanceRoutes = require("./routes/attendanceRoutes"); 
 
 dotenv.config();
 
@@ -33,6 +36,9 @@ app.use("/api/categories",categoryRoutes);
 
 //registration
 app.use("/api/registrations", registrationRoutes);
+
+//Attendance clock in
+app.use("/api/attendance", attendanceRoutes); 
 
 
 // Server Port
