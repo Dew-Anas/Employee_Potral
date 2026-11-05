@@ -1,7 +1,7 @@
 
 import { Link,useNavigate } from "react-router-dom";
 import JobSummary from "../../components/common/JobSummary";
-
+import AttendanceStatus from "../../components/common/AttendanceStatus";
 
 
 import {
@@ -143,9 +143,7 @@ function Dashboard() {
                 Attendance
               </h3>
 
-              <p className="mt-2 text-sm leading-6 text-muted">
-                Manage your daily clock-in and clock-out activity.
-              </p>
+             <AttendanceStatus />
 
               <Link
                 to="/attendance"

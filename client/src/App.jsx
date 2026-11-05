@@ -9,6 +9,7 @@ import Login from "./pages/Auth/Login";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import Profile from "./pages/Profile/Profile";
 import Register from "./pages/Auth/Register";
+import Attendance from "./pages/Attendance/Attendance";
 
 
 function EmployeeLayout() {
@@ -38,8 +39,7 @@ function App() {
             <Route path="/assignments" element={<Assignments />} />
             <Route path="/assignments/:id" element={<JobDetails />} />
             <Route
-              path="/attendance"
-              element={<h1 className="p-6 text-2xl font-bold">Attendance</h1>}
+              path="attendance" element={<Attendance/>}
             />
             <Route path="/profile" element={<Profile />} />
           </Route>
