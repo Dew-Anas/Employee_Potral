@@ -2,6 +2,7 @@
 import { Link,useNavigate } from "react-router-dom";
 import JobSummary from "../../components/common/JobSummary";
 import AttendanceStatus from "../../components/common/AttendanceStatus";
+import { useTheme } from "../../context/ThemeContext";
 
 
 import {
@@ -10,14 +11,17 @@ import {
   LuClipboardList,
   LuClock3,
   LuArrowUpRight,
-  LuCalendarDays,
   LuUserRound,
   LuArrowRight,
+  LuSun,
+  LuMoon ,
   LuCircleCheck
 } from "react-icons/lu";
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <main className="min-h-screen bg-page px-4 pb-28 pt-5 text-ink sm:px-6 sm:pt-8 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -84,10 +88,22 @@ function Dashboard() {
 
          
 
-          <div className="flex w-fit items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-xs font-medium text-muted">
-            <LuCalendarDays size={16} className="text-primary" />
-            Daily Operations
-          </div>
+          <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label="Toggle theme"
+        className="sticky top-4 z-40 flex w-fit items-center gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 text-sm font-semibold text-ink shadow-lg backdrop-blur-xl transition hover:border-primary/50"
+      >
+        {theme === "dark" ? (
+          <LuSun size={21} className="text-primary" />
+        ) : (
+          <LuMoon size={21} className="text-primary" />
+        )}
+
+        <span>
+          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+        </span>
+      </button>
 
           
         </section>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 
+// Format time using Sri Lanka timezone
 const formatTime = (iso) =>
   new Date(iso).toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -10,16 +11,21 @@ const formatTime = (iso) =>
   });
 
 function AttendanceStatus() {
-  const [attendance, setAttendance] = useState(null);
+  const [current, setCurrent] = useState(null);
+  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
+  // Load today's attendance
   useEffect(() => {
     const loadToday = async () => {
       try {
         const res = await api.get("/attendance/today");
-        setAttendance(res.data.attendance);
+
+        setCurrent(res.data.current || null);
+        setCount((res.data.sessions || []).length);
       } catch (error) {
+        console.error("Attendance status error:", error);
         setFailed(true);
       } finally {
         setLoading(false);
@@ -29,8 +35,10 @@ function AttendanceStatus() {
     loadToday();
   }, []);
 
+  // Default attendance status
   let label = "Not clocked in";
   let detail = "Clock in to start your day";
+  let dot = "bg-muted";
 
   if (loading) {
     label = "Checking attendance...";
@@ -38,21 +46,13 @@ function AttendanceStatus() {
   } else if (failed) {
     label = "Attendance unavailable";
     detail = "Please check attendance page";
-  } else if (attendance && !attendance.clockOut) {
+  } else if (current) {
     label = "Clocked in";
-    detail = `Since ${formatTime(attendance.clockIn)}`;
-  } else if (attendance && attendance.clockOut) {
-    label = "Day completed";
-    detail = `${formatTime(attendance.clockIn)} - ${formatTime(attendance.clockOut)}`;
-  }
-
-  let dot = "bg-muted";
-
-  if (!loading && !failed && attendance && !attendance.clockOut) {
+    detail = `Since ${formatTime(current.clockIn)}`;
     dot = "bg-teal";
-  }
-
-  if (!loading && !failed && attendance && attendance.clockOut) {
+  } else if (count > 0) {
+    label = "Clocked out";
+    detail = "You can clock in again anytime";
     dot = "bg-primary";
   }
 
