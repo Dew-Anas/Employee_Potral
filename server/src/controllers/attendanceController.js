@@ -1,15 +1,16 @@
 
 const Attendance = require("../models/Attendance");
 
+// Sri Lanka local date (YYYY-MM-DD)
 const todayString = () =>
   new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Colombo",
   });
 
-// R2: Clock In - Multiple sessions allowed
+// R2: Clock In
 const clockIn = async (req, res) => {
   try {
-    // Check whether an open session already exists
+    // Check whether employee already has an open session
     const open = await Attendance.findOne({
       employee: req.user._id,
       status: "Clocked In",
@@ -34,9 +35,8 @@ const clockIn = async (req, res) => {
       message: "Clocked in successfully",
       attendance: record,
     });
-
   } catch (err) {
-    // Duplicate open session protection
+    // Handle duplicate open session
     if (err.code === 11000) {
       return res.status(409).json({
         success: false,
@@ -53,17 +53,15 @@ const clockIn = async (req, res) => {
   }
 };
 
-
-// R3: Clock Out - Close current open session
+// R3: Clock Out
 const clockOut = async (req, res) => {
   try {
-    // Find the current open session
+    // Find current open attendance session
     const record = await Attendance.findOne({
       employee: req.user._id,
       status: "Clocked In",
     });
 
-    // No open session found
     if (!record) {
       return res.status(400).json({
         success: false,
@@ -71,16 +69,17 @@ const clockOut = async (req, res) => {
       });
     }
 
-    // TODO: Check In Progress booking before allowing clock out
+    // TODO: Check whether employee has an In Progress booking
+    // before allowing Clock Out.
 
     const now = new Date();
 
-    // Calculate worked minutes for this session
+    // Calculate worked time in minutes
     const workedMinutes = Math.round(
       (now - record.clockIn) / 60000
     );
 
-    // Update attendance record
+    // Update attendance session
     record.clockOut = now;
     record.workedMinutes = workedMinutes;
     record.status = "Clocked Out";
@@ -92,7 +91,6 @@ const clockOut = async (req, res) => {
       message: "Clocked out successfully",
       attendance: record,
     });
-
   } catch (err) {
     console.error("Clock out error:", err.message);
 
@@ -103,27 +101,26 @@ const clockOut = async (req, res) => {
   }
 };
 
-
-// R3: Get Today - All sessions and total worked minutes
+// R3: Get Today's Attendance
 const getToday = async (req, res) => {
   try {
     const employee = req.user._id;
 
-    // Get all today's attendance sessions
+    // Get all attendance sessions for today
     const sessions = await Attendance.find({
       employee,
       date: todayString(),
     }).sort("clockIn");
 
-    // Find current open session (including previous days)
+    // Get current open session
     const current = await Attendance.findOne({
       employee,
       status: "Clocked In",
     });
 
-    // Calculate total completed minutes for today
+    // Calculate total completed working minutes
     const totalMinutes = sessions.reduce(
-      (sum, s) => sum + (s.workedMinutes || 0),
+      (sum, session) => sum + (session.workedMinutes || 0),
       0
     );
 
@@ -133,7 +130,6 @@ const getToday = async (req, res) => {
       current,
       totalMinutes,
     });
-
   } catch (err) {
     console.error("Get today attendance error:", err.message);
 
@@ -143,7 +139,6 @@ const getToday = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   clockIn,
