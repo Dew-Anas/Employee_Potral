@@ -10,6 +10,8 @@ const Attendance = require("./models/Attendance");
 
 const attendanceRoutes = require("./routes/attendanceRoutes"); 
 
+const checklistRoutes = require("./routes/checklistRoutes");
+
 dotenv.config();
 
 const app = express();
@@ -26,7 +28,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.use(express.json());
+
 
 // Authentication Routes
 app.use("/api/auth", authRoutes);
@@ -39,6 +41,9 @@ app.use("/api/registrations", registrationRoutes);
 
 //Attendance clock in
 app.use("/api/attendance", attendanceRoutes); 
+
+//checklist rout 
+app.use("/api/checklist", checklistRoutes);
 
 
 // Server Port
