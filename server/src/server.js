@@ -6,11 +6,12 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const registrationRoutes = require("./routes/registrationRoutes");
+
 const Attendance = require("./models/Attendance");
 
 const attendanceRoutes = require("./routes/attendanceRoutes"); 
 
-const checklistRoutes = require("./routes/checklistRoutes");
+const jobPhotoRoutes = require("./routes/jobPhotoRoutes");
 
 dotenv.config();
 
@@ -42,8 +43,10 @@ app.use("/api/registrations", registrationRoutes);
 //Attendance clock in
 app.use("/api/attendance", attendanceRoutes); 
 
-//checklist rout 
-app.use("/api/checklist", checklistRoutes);
+
+
+// Job Photo Upload
+app.use("/api/photos", jobPhotoRoutes);
 
 
 // Server Port

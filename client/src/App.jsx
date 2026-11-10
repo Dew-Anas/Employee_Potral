@@ -10,7 +10,7 @@ import ProtectedRoute from "./components/common/ProtectedRoute";
 import Profile from "./pages/Profile/Profile";
 import Register from "./pages/Auth/Register";
 import Attendance from "./pages/Attendance/Attendance";
-import ChecklistPanel from "./components/checklist/ChecklistPanel";
+
 
 
 function EmployeeLayout() {
@@ -44,14 +44,7 @@ function App() {
             />
             <Route path="/profile" element={<Profile />} />
 
-            <Route
-              path="/checklist-test"
-              element={
-              <div className="p-4">
-              <ChecklistPanel bookingId="6af1aa719cc38c80aa33ee4f" />
-              </div>
-              }
-                />
+            
           </Route>
         </Route>
       </Routes>
