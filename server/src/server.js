@@ -13,6 +13,11 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 
 const jobPhotoRoutes = require("./routes/jobPhotoRoutes");
 
+const checklistRoutes = require("./routes/checklistRoutes");
+
+// Import employee job notes routes.
+const jobNoteRoutes = require("./routes/jobNoteRoutes");
+
 dotenv.config();
 
 const app = express();
@@ -48,6 +53,12 @@ app.use("/api/attendance", attendanceRoutes);
 // Job Photo Upload
 app.use("/api/photos", jobPhotoRoutes);
 
+
+// Checklist routes for employee tasks.
+app.use("/api/checklists", checklistRoutes);
+
+// Mount employee job notes API.
+app.use("/api/notes", jobNoteRoutes);
 
 // Server Port
 const PORT = process.env.PORT || 5000;
