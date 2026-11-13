@@ -28,20 +28,23 @@ function Dashboard() {
 
         {/* Application Header */}
         <header className="flex items-center justify-between border-b border-line pb-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20">
-              <LuBriefcaseBusiness size={22} />
-            </div>
+          {/*logo*/}
+          
+        <div div className="flex items-center gap-3">
+        <img
+        src={
+        theme === "dark"
+        ? "/images/servicepro-logo-dark.png"
+        : "/images/servicepro-logo-light.png"
+          }
+        alt="ServicePro Verified Experts"
+        className="h-12 w-auto max-w-[220px] object-contain sm:h-14"
+        />
 
-            <div>
-              <h1 className="font-heading text-xl font-bold tracking-tight">
-                ServicePro
-              </h1>
-              <p className="mt-0.5 text-xs text-muted">
-                Employee Portal
-              </p>
-            </div>
-          </div>
+        <span className="sr-only">Employee Portal</span>
+      </div>
+
+          {/*logo end*/}
 
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">

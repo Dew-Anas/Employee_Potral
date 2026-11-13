@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -12,6 +11,8 @@ import {
 
 import { getJobById } from "../../services/jobService";
 import { getPhotos } from "../../services/photoService";
+import { getCompletionGate } from "../../services/completionService";
+
 import PhotoUploader from "../../components/photos/PhotoUploader";
 import NotesPanel from "../../components/notes/NotesPanel";
 
@@ -60,6 +61,15 @@ function JobDetails() {
   // Store checklist update errors.
   const [checklistUpdateError, setChecklistUpdateError] = useState("");
 
+  // Store Completion Gate information from the backend.
+  const [completionGate, setCompletionGate] = useState(null);
+
+  // Track Completion Gate loading state.
+  const [gateLoading, setGateLoading] = useState(true);
+
+  // Track Completion Gate API errors.
+  const [gateError, setGateError] = useState(false);
+
   // Load job details.
   useEffect(() => {
     getJobById(id)
@@ -74,7 +84,6 @@ function JobDetails() {
   // Load uploaded photos from the database.
   const loadPhotos = useCallback(async () => {
     try {
-      // Clear previous photo errors.
       setPhotoLoadError(false);
 
       // Request photos for this booking.
@@ -85,11 +94,9 @@ function JobDetails() {
     } catch (error) {
       console.error("Failed to load photos:", error);
 
-      // Show an error if photo loading fails.
       setPhotoLoadError(true);
       setPhotos([]);
     } finally {
-      // Stop the photo loading state.
       setPhotosLoading(false);
     }
   }, [bookingId]);
@@ -102,7 +109,6 @@ function JobDetails() {
   // Load checklist items from the backend.
   const loadChecklist = useCallback(async () => {
     try {
-      // Clear previous checklist errors.
       setChecklistError(false);
 
       // Request checklist items for this booking.
@@ -113,11 +119,9 @@ function JobDetails() {
     } catch (error) {
       console.error("Failed to load checklist:", error);
 
-      // Show an error if checklist loading fails.
       setChecklistError(true);
       setChecklist([]);
     } finally {
-      // Stop the checklist loading state.
       setChecklistLoading(false);
     }
   }, [bookingId]);
@@ -127,16 +131,40 @@ function JobDetails() {
     loadChecklist();
   }, [loadChecklist]);
 
+  // Load completion requirements from the backend.
+  const loadCompletionGate = useCallback(async () => {
+    try {
+      setGateLoading(true);
+      setGateError(false);
+
+      // Ask the backend whether this booking can be completed.
+      const data = await getCompletionGate(bookingId);
+
+      // Store allowed and missing requirements.
+      setCompletionGate(data);
+    } catch (error) {
+      console.error("Failed to load completion gate:", error);
+
+      setGateError(true);
+      setCompletionGate(null);
+    } finally {
+      setGateLoading(false);
+    }
+  }, [bookingId]);
+
+  // Check completion requirements when the page opens.
+  useEffect(() => {
+    loadCompletionGate();
+  }, [loadCompletionGate]);
+
   // Toggle a checklist item between Pending and Completed.
   const handleChecklistToggle = async (item) => {
     // Prevent another update while an item is being saved.
     if (updatingItemId !== null) return;
 
-    const nextStatus =
-      item.status === "Completed" ? "Pending" : "Completed";
+    const nextStatus = item.status === "Completed" ? "Pending" : "Completed";
 
     try {
-      // Start the update loading state.
       setUpdatingItemId(item._id);
       setChecklistUpdateError("");
 
@@ -148,77 +176,66 @@ function JobDetails() {
         previousItems.map((currentItem) =>
           currentItem._id === item._id
             ? { ...currentItem, status: nextStatus }
-            : currentItem
-        )
+            : currentItem,
+        ),
       );
+
+      // Refresh completion requirements after checklist update.
+      await loadCompletionGate();
     } catch (error) {
       console.error("Failed to update checklist:", error);
 
-      // Display an error if the API update fails.
-      setChecklistUpdateError(
-        "Unable to update this task. Please try again."
-      );
+      setChecklistUpdateError("Unable to update this task. Please try again.");
     } finally {
-      // Stop the update loading state.
       setUpdatingItemId(null);
     }
   };
 
+  // Refresh photos and completion requirements after an upload.
+  const handlePhotoUploaded = async () => {
+    await loadPhotos();
+    await loadCompletionGate();
+  };
+
   // Check whether each photo stage has an uploaded photo.
-  const beforeUploaded = photos.some(
-    (photo) => photo.stage === "Before"
-  );
+  const beforeUploaded = photos.some((photo) => photo.stage === "Before");
 
   const inProgressUploaded = photos.some(
-    (photo) => photo.stage === "In Progress"
+    (photo) => photo.stage === "In Progress",
   );
 
-  const afterUploaded = photos.some(
-    (photo) => photo.stage === "After"
-  );
+  const afterUploaded = photos.some((photo) => photo.stage === "After");
 
   // Calculate photo-based work progress.
-  const progress = afterUploaded
-    ? 100
-    : inProgressUploaded
-      ? 50
-      : 0;
+  const progress = afterUploaded ? 100 : inProgressUploaded ? 50 : 0;
 
   // Get essential checklist items.
-  const essentialItems = checklist.filter(
-    (item) => item.essential
-  );
+  const essentialItems = checklist.filter((item) => item.essential);
 
   // Count completed essential checklist items.
   const completedEssentialItems = essentialItems.filter(
-    (item) => item.status === "Completed"
+    (item) => item.status === "Completed",
   );
 
-  // Completion Gate: all essential checklist items must be Completed.
-  // An empty essential list must NOT pass the gate.
-  const allEssentialDone =
-    essentialItems.length > 0 &&
-    completedEssentialItems.length === essentialItems.length;
-
-  // Check whether the employee can complete the work.
-  const canComplete =
-    workStatus === "In Progress" &&
-    afterUploaded &&
-    allEssentialDone;
-
-  // TEMP-DB: workStatus is only React state, so a refresh resets it to "Assigned".
+  // TEMP-DB: workStatus is only React state, so a refresh resets it.
   // If saved photos already show progress, the work must be In Progress.
   // REAL: Read booking.status from the Booking API and remove this effect.
   useEffect(() => {
-    if (
-      workStatus === "Assigned" &&
-      (inProgressUploaded || afterUploaded)
-    ) {
+    if (workStatus === "Assigned" && (inProgressUploaded || afterUploaded)) {
       setWorkStatus("In Progress");
     }
   }, [workStatus, inProgressUploaded, afterUploaded]);
 
-  // Show loading screen while data is being fetched.
+  // Backend is the source of truth for completion requirements.
+  const canComplete =
+    workStatus === "In Progress" &&
+    completionGate?.allowed === true &&
+    !gateLoading &&
+    !gateError &&
+    !photoLoadError &&
+    !checklistError;
+
+  // Show loading screen while main data is being fetched.
   if (loading || photosLoading || checklistLoading) {
     return (
       <main className="min-h-screen bg-page p-6 text-muted">
@@ -235,22 +252,19 @@ function JobDetails() {
           Back to assignments
         </Link>
 
-        <p className="mt-6 text-muted">
-          This job was not found.
-        </p>
+        <p className="mt-6 text-muted">This job was not found.</p>
       </main>
     );
   }
 
   // Create a Google Maps search link using the job address.
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    job.address
+    job.address,
   )}`;
 
   return (
     <main className="min-h-screen bg-page px-4 pb-28 pt-6 text-ink">
       <div className="mx-auto max-w-2xl">
-
         {/* Back navigation */}
         <Link
           to="/assignments"
@@ -316,9 +330,7 @@ function JobDetails() {
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Work Progress</h2>
 
-            <span className="font-semibold text-primary">
-              {progress}%
-            </span>
+            <span className="font-semibold text-primary">{progress}%</span>
           </div>
 
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated">
@@ -348,9 +360,7 @@ function JobDetails() {
 
           {/* Checklist update error */}
           {checklistUpdateError && (
-            <p className="mt-3 text-sm text-red-400">
-              {checklistUpdateError}
-            </p>
+            <p className="mt-3 text-sm text-red-400">{checklistUpdateError}</p>
           )}
 
           {/* Empty checklist */}
@@ -371,12 +381,9 @@ function JobDetails() {
                   disabled={updatingItemId !== null}
                   className="flex w-full items-start gap-3 rounded-xl border border-line bg-elevated/40 p-3 text-left transition hover:bg-elevated disabled:cursor-wait disabled:opacity-60"
                 >
-                  {/* Checklist status icon */}
                   <LuCircle
                     className={`mt-0.5 shrink-0 ${
-                      item.status === "Completed"
-                        ? "text-teal"
-                        : "text-muted"
+                      item.status === "Completed" ? "text-teal" : "text-muted"
                     }`}
                   />
 
@@ -424,35 +431,31 @@ function JobDetails() {
           </p>
         )}
 
-        {/* Photo status messages grouped in one block */}
+        {/* Photo status messages */}
         {(beforeUploaded || inProgressUploaded || afterUploaded) && (
           <div className="mt-4 space-y-1 text-sm text-teal">
             {beforeUploaded && <p>Before photo uploaded</p>}
             {inProgressUploaded && (
               <p>In Progress photo uploaded — 50% complete</p>
             )}
-            {afterUploaded && (
-              <p>After photo uploaded — 100% complete</p>
-            )}
+            {afterUploaded && <p>After photo uploaded — 100% complete</p>}
           </div>
         )}
 
         {/* Before photo upload */}
-        {workStatus === "Assigned" &&
-          !beforeUploaded &&
-          !photoLoadError && (
-            <div className="mt-6">
-              <PhotoUploader
-                bookingId={bookingId}
-                stage="Before"
-                onUploaded={loadPhotos}
-              />
+        {workStatus === "Assigned" && !beforeUploaded && !photoLoadError && (
+          <div className="mt-6">
+            <PhotoUploader
+              bookingId={bookingId}
+              stage="Before"
+              onUploaded={handlePhotoUploaded}
+            />
 
-              <p className="mt-2 text-xs text-muted">
-                Upload a Before photo to start work.
-              </p>
-            </div>
-          )}
+            <p className="mt-2 text-xs text-muted">
+              Upload a Before photo to start work.
+            </p>
+          </div>
+        )}
 
         {/* In Progress photo upload */}
         {workStatus === "In Progress" && !inProgressUploaded && (
@@ -460,11 +463,12 @@ function JobDetails() {
             <PhotoUploader
               bookingId={bookingId}
               stage="In Progress"
-              onUploaded={loadPhotos}
+              onUploaded={handlePhotoUploaded}
             />
 
             <p className="mt-2 text-xs text-muted">
-              Upload a progress photo after completing approximately half of the work.
+              Upload a progress photo after completing approximately half of the
+              work.
             </p>
           </div>
         )}
@@ -477,7 +481,7 @@ function JobDetails() {
               <PhotoUploader
                 bookingId={bookingId}
                 stage="After"
-                onUploaded={loadPhotos}
+                onUploaded={handlePhotoUploaded}
               />
 
               <p className="mt-2 text-xs text-muted">
@@ -498,23 +502,62 @@ function JobDetails() {
           </button>
         )}
 
+        {/* Completion Gate status */}
+        {workStatus === "In Progress" && (
+          <section className="mt-4 rounded-2xl border border-line bg-surface p-4">
+            <h2 className="font-semibold">Completion Requirements</h2>
+
+            {gateError && (
+              <p className="mt-3 text-sm text-red-400">
+                Unable to verify completion requirements. Please refresh and try
+                again.
+              </p>
+            )}
+
+            {!gateError && gateLoading && (
+              <p className="mt-3 text-sm text-muted">
+                Checking completion requirements...
+              </p>
+            )}
+
+            {!gateError && !gateLoading && completionGate && (
+              <>
+                {completionGate.allowed ? (
+                  <p className="mt-3 text-sm text-teal">
+                    All completion requirements are satisfied.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm text-muted">
+                      Complete the following requirements:
+                    </p>
+
+                   {(completionGate.missing || []).map((item, index) => (
+                      <p
+                        key={index}
+                        className="flex items-start gap-2 text-sm text-amber-400"
+                      >
+                        <LuCircle className="mt-1 shrink-0" />
+                        {item}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
         {/* Complete Work */}
         {workStatus === "In Progress" && (
           <button
             type="button"
             onClick={() => setWorkStatus("Completed")}
-            disabled={!canComplete || photoLoadError}
+            disabled={!canComplete}
             className="mt-6 w-full rounded-xl bg-teal py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Complete Work
           </button>
-        )}
-
-        {/* Explain why completion is disabled */}
-        {workStatus === "In Progress" && !allEssentialDone && (
-          <p className="mt-2 text-center text-xs text-muted">
-            Complete all essential checklist items to finish this work.
-          </p>
         )}
 
         {/* Work completed message */}

@@ -18,6 +18,9 @@ const checklistRoutes = require("./routes/checklistRoutes");
 // Import employee job notes routes.
 const jobNoteRoutes = require("./routes/jobNoteRoutes");
 
+//import completion routes
+const completionRoutes = require("./routes/completionRoutes");
+
 dotenv.config();
 
 const app = express();
@@ -59,6 +62,9 @@ app.use("/api/checklists", checklistRoutes);
 
 // Mount employee job notes API.
 app.use("/api/notes", jobNoteRoutes);
+
+//completion routs
+app.use("/api/completion", completionRoutes);
 
 // Server Port
 const PORT = process.env.PORT || 5000;

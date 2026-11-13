@@ -20,8 +20,8 @@ const router = express.Router();
 
 router.get("/:bookingId",protect,employeeOnly,getChecklist);
 
-// PATCH - Update one checklist item's status.
-router.patch("/:itemId", protect, employeeOnly, updateChecklistItem);
+// PUT - Update one checklist item's status.
+router.put("/item/:itemId", protect, employeeOnly, updateChecklistItem);
 
 // Export router so server.js can use it.
 module.exports = router;
