@@ -1,3 +1,9 @@
+// client/src/pages/JobDetails/JobDetails.jsx
+// WHY: Full job page: customer info, instructions, photos, notes, completion gate, Start / Complete.
+// ROUTE: /assignments/:id  (id = Booking _id in real mode)
+// DEMO SWITCH: USING_DEMO_DATA (services/jobService.js). Demo = local state only. Real = backend API.
+// APIs: jobService (job, start, complete), photoService, completionService, noteService.
+
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -9,87 +15,75 @@ import {
   LuCircle,
 } from "react-icons/lu";
 
-import { getJobById } from "../../services/jobService";
+import {
+  getJobById,
+  startJob,
+  completeJob,
+  USING_DEMO_DATA,
+} from "../../services/jobService";
 import { getPhotos } from "../../services/photoService";
 import { getCompletionGate } from "../../services/completionService";
 
 import PhotoUploader from "../../components/photos/PhotoUploader";
 import NotesPanel from "../../components/notes/NotesPanel";
 
-import {
-  getChecklist,
-  updateChecklistItem,
-} from "../../services/checklistService";
-
 function JobDetails() {
   const { id } = useParams();
 
-  // TEMP-DB: Replace this ID with the real booking ID from the API later.
-  // REAL: Use the actual booking ID returned by the Booking API.
-  const bookingId = "6af1aa719cc38c80aa33ee4f";
+  // TEMP-DB: In demo mode the job id is fake, so photos/notes/gate use a test booking id.
+  // REAL: The route id IS the real Booking _id, so it is used directly.
+  const bookingId = USING_DEMO_DATA ? "6af1aa719cc38c80aa33ee4f" : id;
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Store the current work status.
+  // Current work status shown on the page.
   const [workStatus, setWorkStatus] = useState("Assigned");
 
-  // Sync the UI status with the loaded job data.
+  // Start / Complete request state.
+  const [acting, setActing] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  // Sync the page status with the loaded job.
   useEffect(() => {
     if (job) {
       setWorkStatus(job.status || "Assigned");
     }
   }, [job]);
 
-  // Store uploaded photos.
+  // Photos.
   const [photos, setPhotos] = useState([]);
   const [photosLoading, setPhotosLoading] = useState(true);
   const [photoLoadError, setPhotoLoadError] = useState(false);
 
-  // Store checklist items received from the backend.
-  const [checklist, setChecklist] = useState([]);
-
-  // Track checklist loading state.
-  const [checklistLoading, setChecklistLoading] = useState(true);
-
-  // Track checklist API errors.
-  const [checklistError, setChecklistError] = useState(false);
-
-  // Store the ID of the checklist item currently updating.
-  const [updatingItemId, setUpdatingItemId] = useState(null);
-
-  // Store checklist update errors.
-  const [checklistUpdateError, setChecklistUpdateError] = useState("");
-
-  // Store Completion Gate information from the backend.
+  // Completion Gate (from backend).
   const [completionGate, setCompletionGate] = useState(null);
-
-  // Track Completion Gate loading state.
   const [gateLoading, setGateLoading] = useState(true);
-
-  // Track Completion Gate API errors.
   const [gateError, setGateError] = useState(false);
 
-  // Load job details.
-  useEffect(() => {
-    getJobById(id)
-      .then(setJob)
-      .catch((error) => {
-        console.error("Failed to load job:", error);
-        setJob(null);
-      })
-      .finally(() => setLoading(false));
+  // Load the job.
+  const loadJob = useCallback(async () => {
+    try {
+      const data = await getJobById(id);
+      setJob(data);
+    } catch (error) {
+      console.error("Failed to load job:", error);
+      setJob(null);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  // Load uploaded photos from the database.
+  useEffect(() => {
+    loadJob();
+  }, [loadJob]);
+
+  // Load uploaded photos.
   const loadPhotos = useCallback(async () => {
     try {
       setPhotoLoadError(false);
 
-      // Request photos for this booking.
       const data = await getPhotos(bookingId);
-
-      // Store the returned photos.
       setPhotos(data.photos || []);
     } catch (error) {
       console.error("Failed to load photos:", error);
@@ -101,46 +95,17 @@ function JobDetails() {
     }
   }, [bookingId]);
 
-  // Load photos when the page opens.
   useEffect(() => {
     loadPhotos();
   }, [loadPhotos]);
 
-  // Load checklist items from the backend.
-  const loadChecklist = useCallback(async () => {
-    try {
-      setChecklistError(false);
-
-      // Request checklist items for this booking.
-      const data = await getChecklist(bookingId);
-
-      // Store checklist items in React state.
-      setChecklist(data.checklist || []);
-    } catch (error) {
-      console.error("Failed to load checklist:", error);
-
-      setChecklistError(true);
-      setChecklist([]);
-    } finally {
-      setChecklistLoading(false);
-    }
-  }, [bookingId]);
-
-  // Load checklist when the job details page opens.
-  useEffect(() => {
-    loadChecklist();
-  }, [loadChecklist]);
-
-  // Load completion requirements from the backend.
+  // Load completion requirements.
   const loadCompletionGate = useCallback(async () => {
     try {
       setGateLoading(true);
       setGateError(false);
 
-      // Ask the backend whether this booking can be completed.
       const data = await getCompletionGate(bookingId);
-
-      // Store allowed and missing requirements.
       setCompletionGate(data);
     } catch (error) {
       console.error("Failed to load completion gate:", error);
@@ -152,76 +117,96 @@ function JobDetails() {
     }
   }, [bookingId]);
 
-  // Check completion requirements when the page opens.
   useEffect(() => {
     loadCompletionGate();
   }, [loadCompletionGate]);
 
-  // Toggle a checklist item between Pending and Completed.
-  const handleChecklistToggle = async (item) => {
-    // Prevent another update while an item is being saved.
-    if (updatingItemId !== null) return;
-
-    const nextStatus = item.status === "Completed" ? "Pending" : "Completed";
-
-    try {
-      setUpdatingItemId(item._id);
-      setChecklistUpdateError("");
-
-      // Save the new status in MongoDB through the API.
-      await updateChecklistItem(item._id, nextStatus);
-
-      // Update the UI after the backend confirms success.
-      setChecklist((previousItems) =>
-        previousItems.map((currentItem) =>
-          currentItem._id === item._id
-            ? { ...currentItem, status: nextStatus }
-            : currentItem,
-        ),
-      );
-
-      // Refresh completion requirements after checklist update.
-      await loadCompletionGate();
-    } catch (error) {
-      console.error("Failed to update checklist:", error);
-
-      setChecklistUpdateError("Unable to update this task. Please try again.");
-    } finally {
-      setUpdatingItemId(null);
-    }
-  };
-
-  // Refresh photos and completion requirements after an upload.
+  // Refresh photos and gate after an upload.
   const handlePhotoUploaded = async () => {
     await loadPhotos();
     await loadCompletionGate();
   };
 
-  // Check whether each photo stage has an uploaded photo.
+  // Start Work button.
+  const handleStart = async () => {
+    if (acting) return;
+
+    // TEMP-DB: demo mode only changes local state.
+    // REAL: the backend checks clock-in, one active job, Before photo, then changes Booking.status.
+    if (USING_DEMO_DATA) {
+      setWorkStatus("In Progress");
+      return;
+    }
+
+    try {
+      setActing(true);
+      setActionError("");
+
+      await startJob(id);
+      await loadJob();
+    } catch (error) {
+      console.error("Failed to start work:", error);
+
+      setActionError(
+        error.response?.data?.message ||
+          "Unable to start work. Please try again."
+      );
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // Complete Work button.
+  const handleComplete = async () => {
+    if (acting) return;
+
+    // TEMP-DB: demo mode only changes local state.
+    // REAL: the backend runs the Completion Gate, then changes Booking.status.
+    if (USING_DEMO_DATA) {
+      setWorkStatus("Completed");
+      return;
+    }
+
+    try {
+      setActing(true);
+      setActionError("");
+
+      await completeJob(id);
+      await loadJob();
+      await loadCompletionGate();
+    } catch (error) {
+      console.error("Failed to complete work:", error);
+
+      setActionError(
+        error.response?.data?.message ||
+          "Unable to complete work. Please try again."
+      );
+
+      // The gate may have changed, so refresh the requirement list.
+      await loadCompletionGate();
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // Which photo stages exist.
   const beforeUploaded = photos.some((photo) => photo.stage === "Before");
-
   const inProgressUploaded = photos.some(
-    (photo) => photo.stage === "In Progress",
+    (photo) => photo.stage === "In Progress"
   );
-
   const afterUploaded = photos.some((photo) => photo.stage === "After");
 
-  // Calculate photo-based work progress.
+  // Photo-based progress: 0 / 50 / 100.
   const progress = afterUploaded ? 100 : inProgressUploaded ? 50 : 0;
 
-  // Get essential checklist items.
-  const essentialItems = checklist.filter((item) => item.essential);
-
-  // Count completed essential checklist items.
-  const completedEssentialItems = essentialItems.filter(
-    (item) => item.status === "Completed",
-  );
-
-  // TEMP-DB: workStatus is only React state, so a refresh resets it.
-  // If saved photos already show progress, the work must be In Progress.
-  // REAL: Read booking.status from the Booking API and remove this effect.
+  // TEMP-DB (demo only): local status resets on refresh, so photos decide In Progress.
+  // REAL: Booking.status comes from the API, so this effect does nothing.
   useEffect(() => {
-    if (workStatus === "Assigned" && (inProgressUploaded || afterUploaded)) {
+    if (
+      USING_DEMO_DATA &&
+      workStatus === "Assigned" &&
+      (inProgressUploaded || afterUploaded)
+    ) {
       setWorkStatus("In Progress");
     }
   }, [workStatus, inProgressUploaded, afterUploaded]);
@@ -233,10 +218,9 @@ function JobDetails() {
     !gateLoading &&
     !gateError &&
     !photoLoadError &&
-    !checklistError;
+    !acting;
 
-  // Show loading screen while main data is being fetched.
-  if (loading || photosLoading || checklistLoading) {
+  if (loading || photosLoading) {
     return (
       <main className="min-h-screen bg-page p-6 text-muted">
         Loading job...
@@ -244,7 +228,6 @@ function JobDetails() {
     );
   }
 
-  // Show an error if the job does not exist.
   if (!job) {
     return (
       <main className="min-h-screen bg-page px-4 pt-6 text-ink">
@@ -257,9 +240,8 @@ function JobDetails() {
     );
   }
 
-  // Create a Google Maps search link using the job address.
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    job.address,
+    job.address
   )}`;
 
   return (
@@ -341,86 +323,34 @@ function JobDetails() {
           </div>
         </section>
 
-        {/* Work checklist */}
+        {/* Work instructions (read-only) */}
         <section className="mt-6 rounded-2xl border border-line bg-surface p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-semibold">Work Checklist</h2>
+          <h2 className="font-semibold">Work Instructions</h2>
 
-            <span className="text-xs text-muted">
-              {completedEssentialItems.length}/{essentialItems.length} essential
-            </span>
+          <p className="mt-1 text-xs text-muted">Sent by admin. Read only.</p>
+
+          {(job.requestedTasks || []).length === 0 &&
+            !job.additionalRequirements && (
+              <p className="mt-4 text-sm text-muted">
+                No instructions were provided for this job.
+              </p>
+            )}
+
+          <div className="mt-4 space-y-2">
+            {(job.requestedTasks || []).map((task, index) => (
+              <p
+                key={index}
+                className="rounded-xl border border-line bg-elevated/40 p-3 text-sm text-ink"
+              >
+                {task}
+              </p>
+            ))}
           </div>
 
-          {/* Checklist loading error */}
-          {checklistError && (
-            <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-              Unable to load job checklist. Please refresh and try again.
+          {job.additionalRequirements && (
+            <p className="mt-4 whitespace-pre-wrap rounded-xl border border-line bg-elevated/40 p-3 text-sm text-muted">
+              {job.additionalRequirements}
             </p>
-          )}
-
-          {/* Checklist update error */}
-          {checklistUpdateError && (
-            <p className="mt-3 text-sm text-red-400">{checklistUpdateError}</p>
-          )}
-
-          {/* Empty checklist */}
-          {!checklistError && checklist.length === 0 && (
-            <p className="mt-4 text-sm text-muted">
-              No checklist items available.
-            </p>
-          )}
-
-          {/* Display interactive checklist items */}
-          {!checklistError && checklist.length > 0 && (
-            <div className="mt-4 space-y-3">
-              {checklist.map((item) => (
-                <button
-                  type="button"
-                  key={item._id}
-                  onClick={() => handleChecklistToggle(item)}
-                  disabled={updatingItemId !== null}
-                  className="flex w-full items-start gap-3 rounded-xl border border-line bg-elevated/40 p-3 text-left transition hover:bg-elevated disabled:cursor-wait disabled:opacity-60"
-                >
-                  <LuCircle
-                    className={`mt-0.5 shrink-0 ${
-                      item.status === "Completed" ? "text-teal" : "text-muted"
-                    }`}
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={`text-sm ${
-                        item.status === "Completed"
-                          ? "text-muted line-through"
-                          : "text-ink"
-                      }`}
-                    >
-                      {item.title}
-                    </p>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-muted">
-                        {updatingItemId === item._id
-                          ? "Saving..."
-                          : item.status}
-                      </span>
-
-                      {item.essential && (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                          Essential
-                        </span>
-                      )}
-
-                      {!item.essential && (
-                        <span className="rounded-full bg-elevated px-2 py-0.5 text-xs text-muted">
-                          Optional
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
           )}
         </section>
 
@@ -494,11 +424,11 @@ function JobDetails() {
         {workStatus === "Assigned" && (
           <button
             type="button"
-            onClick={() => setWorkStatus("In Progress")}
-            disabled={!beforeUploaded || photoLoadError}
+            onClick={handleStart}
+            disabled={!beforeUploaded || photoLoadError || acting}
             className="mt-6 w-full rounded-xl bg-primary py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Start Work
+            {acting ? "Starting..." : "Start Work"}
           </button>
         )}
 
@@ -532,7 +462,7 @@ function JobDetails() {
                       Complete the following requirements:
                     </p>
 
-                   {(completionGate.missing || []).map((item, index) => (
+                    {(completionGate.missing || []).map((item, index) => (
                       <p
                         key={index}
                         className="flex items-start gap-2 text-sm text-amber-400"
@@ -552,12 +482,19 @@ function JobDetails() {
         {workStatus === "In Progress" && (
           <button
             type="button"
-            onClick={() => setWorkStatus("Completed")}
+            onClick={handleComplete}
             disabled={!canComplete}
             className="mt-6 w-full rounded-xl bg-teal py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Complete Work
+            {acting ? "Completing..." : "Complete Work"}
           </button>
+        )}
+
+        {/* Start / Complete error from the server */}
+        {actionError && (
+          <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-sm text-red-400">
+            {actionError}
+          </p>
         )}
 
         {/* Work completed message */}
@@ -568,7 +505,7 @@ function JobDetails() {
         )}
 
         {/* Notes and incident logs */}
-        <NotesPanel bookingId={bookingId} />
+        <NotesPanel bookingId={bookingId} onSaved={loadCompletionGate} />
       </div>
     </main>
   );

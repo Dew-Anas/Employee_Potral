@@ -4,7 +4,7 @@ import { getNotes, createNote } from "../../services/noteService";
 
 const MAX_LENGTH = 1000;
 
-function NotesPanel({ bookingId }) {
+function NotesPanel({ bookingId, onSaved }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -57,6 +57,13 @@ function NotesPanel({ bookingId }) {
 
       // Reload notes to display the newly saved note.
       await loadNotes();
+
+      // Refresh the completion gate after saving a note.
+      try {
+        await onSaved?.();
+      } catch (error) {
+        console.error("Failed to refresh completion gate:", error);
+      }
     } catch (error) {
       console.error("Failed to save note:", error);
 
