@@ -1,11 +1,30 @@
+// server/src/controllers/attendanceController.js
+// WHY: Attendance for the logged-in employee: Clock In, Clock Out, today's sessions, and date-range history.
+// ROUTES: POST /clock-in, POST /clock-out, GET /today, GET /history (routes/attendanceRoutes.js; protect + employeeOnly)
+// MODELS: Attendance (many sessions per day, one open session), Booking (to block Clock Out during a job)
+// RULES: Clock Out is blocked while a job is In Progress (lead, 5 Nov).
+// HANDOFF: GET /history is the employee's own report. Admin / reports read the same attendances data.
+// TODO(confirm): admin report endpoint waits for the admin role value (Dev_B enum says "admin", our users say "EMPLOYEE").
 
 const Attendance = require("../models/Attendance");
+const Booking = require("../models/Booking");
 
-// Sri Lanka local date (YYYY-MM-DD)
-const todayString = () =>
-  new Date().toLocaleDateString("en-CA", {
+// Convert a Date to Sri Lanka local date (YYYY-MM-DD)
+const toLocalDate = (date) =>
+  date.toLocaleDateString("en-CA", {
     timeZone: "Asia/Colombo",
   });
+
+// Sri Lanka local date for today
+const todayString = () => toLocalDate(new Date());
+
+// Check the text looks like YYYY-MM-DD and is a real calendar date.
+const isValidDateString = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
 
 // R2: Clock In
 const clockIn = async (req, res) => {
@@ -69,15 +88,23 @@ const clockOut = async (req, res) => {
       });
     }
 
-    // TODO: Check whether employee has an In Progress booking
-    // before allowing Clock Out.
+    // Rule: no Clock Out while a job is In Progress.
+    const activeJob = await Booking.findOne({
+      employee: req.user._id,
+      status: "In Progress",
+    }).select("_id");
+
+    if (activeJob) {
+      return res.status(400).json({
+        success: false,
+        message: "Finish your current job before clocking out",
+      });
+    }
 
     const now = new Date();
 
     // Calculate worked time in minutes
-    const workedMinutes = Math.round(
-      (now - record.clockIn) / 60000
-    );
+    const workedMinutes = Math.round((now - record.clockIn) / 60000);
 
     // Update attendance session
     record.clockOut = now;
@@ -140,8 +167,97 @@ const getToday = async (req, res) => {
   }
 };
 
+// GET /api/attendance/history?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Default: last 7 days including today. Maximum range: 31 days.
+const getHistory = async (req, res) => {
+  try {
+    const today = todayString();
+
+    // Default range = today and the 6 days before it.
+    const defaultFrom = toLocalDate(
+      new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
+    );
+
+    const from = req.query.from || defaultFrom;
+    const to = req.query.to || today;
+
+    if (!isValidDateString(from) || !isValidDateString(to)) {
+      return res.status(400).json({
+        success: false,
+        message: "Dates must be in YYYY-MM-DD format",
+      });
+    }
+
+    if (from > to) {
+      return res.status(400).json({
+        success: false,
+        message: "'from' date must not be after 'to' date",
+      });
+    }
+
+    const dayCount =
+      (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+        86400000 +
+      1;
+
+    if (dayCount > 31) {
+      return res.status(400).json({
+        success: false,
+        message: "Date range must be 31 days or less",
+      });
+    }
+
+    // The date field is a YYYY-MM-DD string, so string comparison works.
+    const sessions = await Attendance.find({
+      employee: req.user._id,
+      date: { $gte: from, $lte: to },
+    })
+      .sort({ date: -1, clockIn: 1 })
+      .select("date clockIn clockOut workedMinutes status")
+      .lean();
+
+    // Group sessions by date.
+    const dayMap = new Map();
+
+    sessions.forEach((session) => {
+      if (!dayMap.has(session.date)) {
+        dayMap.set(session.date, {
+          date: session.date,
+          totalMinutes: 0,
+          sessions: [],
+        });
+      }
+
+      const day = dayMap.get(session.date);
+      day.sessions.push(session);
+      // An open session has workedMinutes 0, so it adds nothing until Clock Out.
+      day.totalMinutes += session.workedMinutes || 0;
+    });
+
+    const days = Array.from(dayMap.values());
+
+    const totalMinutes = days.reduce((sum, day) => sum + day.totalMinutes, 0);
+
+    return res.status(200).json({
+      success: true,
+      from,
+      to,
+      days,
+      totalMinutes,
+    });
+  } catch (err) {
+    console.error("Get attendance history error:", err.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   clockIn,
   clockOut,
   getToday,
+  getHistory,
 };

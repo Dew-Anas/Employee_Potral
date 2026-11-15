@@ -1,11 +1,38 @@
-// server/src/controllers/jobStatusController.js
-// WHY: Start and Complete a job = change Booking.status (Assigned -> In Progress -> Completed).
-// ROUTES: PUT /api/employee/jobs/:id/start and /complete (routes/employeeJobRoutes.js)
-// START RULES: job is mine + status Assigned + I am clocked in + no other job In Progress + Before photo uploaded.
-// COMPLETE RULES: job is mine + status In Progress + Completion Gate passes (3 photos + a note).
-// TODO(confirm): Dev_B Booking has no startedAt/completedAt. Times are recorded in auditlogs (logAudit) for now.
-// TODO(booking): ask Dev B to add startedAt/completedAt to Booking (work-time calculation needs them).
-// TODO(confirm): In Progress photo = 50% (lead). 2-Pending limit is enforced by the admin assign API (Dev 2), not here.
+
+/*
+WHY: Start and Complete a job = change Booking.status
+(Assigned -> In Progress -> Completed).
+
+ROUTES:
+PUT /api/employee/jobs/:id/start
+PUT /api/employee/jobs/:id/complete
+
+START RULES:
+- Job belongs to employee
+- Job status is Assigned
+- Job must be accepted first
+- Employee must be clocked in
+- No other job In Progress
+- Before photo uploaded
+
+COMPLETE RULES:
+- Job belongs to employee
+- Job status is In Progress
+- Completion Gate passes (3 photos + a note)
+
+TODO(confirm):
+Dev_B Booking has no startedAt/completedAt.
+Times are recorded in auditlogs (logAudit) for now.
+
+TODO(booking):
+Ask Dev B to add startedAt/completedAt to Booking
+(work-time calculation needs them).
+
+TODO(confirm):
+In Progress photo = 50% (lead).
+2-Pending limit is enforced by admin assign API (Dev 2),
+not here.
+*/
 
 const mongoose = require("mongoose");
 
@@ -13,6 +40,7 @@ const Booking = require("../models/Booking");
 const Attendance = require("../models/Attendance");
 const JobPhoto = require("../models/JobPhoto");
 const logAudit = require("../utils/logAudit");
+const AssignmentResponse = require("../models/AssignmentResponse");
 const { checkCompletion } = require("./completionController");
 
 // PUT /api/employee/jobs/:id/start
@@ -22,20 +50,43 @@ const startJob = async (req, res) => {
     const employeeId = req.user._id;
 
     if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ success: false, message: "Invalid job id" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid job id",
+      });
     }
 
     // The job must be mine.
-    const booking = await Booking.findOne({ _id: id, employee: employeeId });
+    const booking = await Booking.findOne({
+      _id: id,
+      employee: employeeId,
+    });
 
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
     }
 
     if (booking.status !== "Assigned") {
       return res.status(400).json({
         success: false,
         message: "Only an assigned job can be started",
+      });
+    }
+
+    // Rule: the job must be accepted first.
+    const accepted = await AssignmentResponse.findOne({
+      booking: booking._id,
+      employee: employeeId,
+      response: "Accepted",
+    }).select("_id");
+
+    if (!accepted) {
+      return res.status(400).json({
+        success: false,
+        message: "Accept this job before starting",
       });
     }
 
@@ -81,9 +132,17 @@ const startJob = async (req, res) => {
 
     // Change status only if it is still Assigned (prevents a double start).
     const updated = await Booking.findOneAndUpdate(
-      { _id: booking._id, employee: employeeId, status: "Assigned" },
-      { status: "In Progress" },
-      { new: true }
+      {
+        _id: booking._id,
+        employee: employeeId,
+        status: "Assigned",
+      },
+      {
+        status: "In Progress",
+      },
+      {
+        new: true,
+      }
     );
 
     if (!updated) {
@@ -124,13 +183,22 @@ const completeJob = async (req, res) => {
     const employeeId = req.user._id;
 
     if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ success: false, message: "Invalid job id" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid job id",
+      });
     }
 
-    const booking = await Booking.findOne({ _id: id, employee: employeeId });
+    const booking = await Booking.findOne({
+      _id: id,
+      employee: employeeId,
+    });
 
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
     }
 
     if (booking.status !== "In Progress") {
@@ -141,7 +209,10 @@ const completeJob = async (req, res) => {
     }
 
     // Completion Gate: the backend decides, never the UI.
-    const missing = await checkCompletion(booking._id, employeeId);
+    const missing = await checkCompletion(
+      booking._id,
+      employeeId
+    );
 
     if (missing.length > 0) {
       return res.status(400).json({
@@ -152,9 +223,17 @@ const completeJob = async (req, res) => {
     }
 
     const updated = await Booking.findOneAndUpdate(
-      { _id: booking._id, employee: employeeId, status: "In Progress" },
-      { status: "Completed" },
-      { new: true }
+      {
+        _id: booking._id,
+        employee: employeeId,
+        status: "In Progress",
+      },
+      {
+        status: "Completed",
+      },
+      {
+        new: true,
+      }
     );
 
     if (!updated) {

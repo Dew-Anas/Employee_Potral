@@ -1,8 +1,9 @@
 // client/src/pages/JobDetails/JobDetails.jsx
-// WHY: Full job page: customer info, instructions, photos, notes, completion gate, Start / Complete.
+// WHY: Full job page: customer info, instructions, Accept / Decline, photos, notes, completion gate, Start / Complete.
 // ROUTE: /assignments/:id  (id = Booking _id in real mode)
+// FLOW: Assigned -> Accept -> Before photo -> Start Work -> In Progress -> After photo + note -> Complete Work.
 // DEMO SWITCH: USING_DEMO_DATA (services/jobService.js). Demo = local state only. Real = backend API.
-// APIs: jobService (job, start, complete), photoService, completionService, noteService.
+// APIs: jobService (job, respond, start, complete), photoService, completionService, noteService.
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -19,6 +20,7 @@ import {
   getJobById,
   startJob,
   completeJob,
+  respondToJob,
   USING_DEMO_DATA,
 } from "../../services/jobService";
 import { getPhotos } from "../../services/photoService";
@@ -40,14 +42,20 @@ function JobDetails() {
   // Current work status shown on the page.
   const [workStatus, setWorkStatus] = useState("Assigned");
 
-  // Start / Complete request state.
+  // Accept / Decline answer: null | "Accepted" | "Declined".
+  const [response, setResponse] = useState(null);
+  const [showDeclineBox, setShowDeclineBox] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
+
+  // Shared request state for Accept / Decline / Start / Complete.
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  // Sync the page status with the loaded job.
+  // Sync the page with the loaded job.
   useEffect(() => {
     if (job) {
       setWorkStatus(job.status || "Assigned");
+      setResponse(job.response || null);
     }
   }, [job]);
 
@@ -127,12 +135,49 @@ function JobDetails() {
     await loadCompletionGate();
   };
 
+  // Accept or Decline button.
+  const handleRespond = async (answer) => {
+    if (acting) return;
+
+    // TEMP-DB: demo mode only changes local state.
+    // REAL: the backend saves the answer in assignmentresponses.
+    if (USING_DEMO_DATA) {
+      setResponse(answer);
+      setShowDeclineBox(false);
+      return;
+    }
+
+    try {
+      setActing(true);
+      setActionError("");
+
+      await respondToJob(id, answer, answer === "Declined" ? declineReason : "");
+
+      setResponse(answer);
+      setShowDeclineBox(false);
+    } catch (error) {
+      console.error("Failed to send response:", error);
+
+      setActionError(
+        error.response?.data?.message ||
+          "Unable to send your response. Please try again."
+      );
+
+      // 409 = already answered earlier, so reload the real answer.
+      if (error.response?.status === 409) {
+        await loadJob();
+      }
+    } finally {
+      setActing(false);
+    }
+  };
+
   // Start Work button.
   const handleStart = async () => {
     if (acting) return;
 
     // TEMP-DB: demo mode only changes local state.
-    // REAL: the backend checks clock-in, one active job, Before photo, then changes Booking.status.
+    // REAL: the backend checks accepted, clock-in, one active job, Before photo, then changes Booking.status.
     if (USING_DEMO_DATA) {
       setWorkStatus("In Progress");
       return;
@@ -354,6 +399,90 @@ function JobDetails() {
           )}
         </section>
 
+        {/* Accept / Decline (only while Assigned and not answered) */}
+        {workStatus === "Assigned" && !response && (
+          <section className="mt-6 rounded-2xl border border-line bg-surface p-4">
+            <h2 className="font-semibold">New job assigned to you</h2>
+
+            <p className="mt-1 text-xs text-muted">
+              Accept this job to start work, or decline it.
+            </p>
+
+            {!showDeclineBox && (
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleRespond("Accepted")}
+                  disabled={acting}
+                  className="flex-1 rounded-xl bg-teal py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {acting ? "Saving..." : "Accept"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeclineBox(true);
+                    setActionError("");
+                  }}
+                  disabled={acting}
+                  className="flex-1 rounded-xl border border-line py-3 font-semibold text-ink transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
+            )}
+
+            {showDeclineBox && (
+              <div className="mt-4">
+                <p className="text-sm text-muted">
+                  Tell admin why (optional). Admin will be informed.
+                </p>
+
+                <textarea
+                  value={declineReason}
+                  onChange={(event) => setDeclineReason(event.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Example: Another job is taking longer than planned."
+                  className="mt-2 w-full resize-none rounded-xl border border-line bg-elevated/40 p-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none"
+                />
+
+                <div className="mt-1 text-right text-xs text-muted">
+                  {declineReason.length}/500
+                </div>
+
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleRespond("Declined")}
+                    disabled={acting}
+                    className="flex-1 rounded-xl bg-amber-500 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {acting ? "Saving..." : "Confirm Decline"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowDeclineBox(false)}
+                    disabled={acting}
+                    className="flex-1 rounded-xl border border-line py-3 font-semibold text-ink transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Declined message */}
+        {workStatus === "Assigned" && response === "Declined" && (
+          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center text-sm text-amber-400">
+            You declined this job. Admin has been informed.
+          </div>
+        )}
+
         {/* Photo loading error */}
         {photoLoadError && (
           <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
@@ -372,20 +501,23 @@ function JobDetails() {
           </div>
         )}
 
-        {/* Before photo upload */}
-        {workStatus === "Assigned" && !beforeUploaded && !photoLoadError && (
-          <div className="mt-6">
-            <PhotoUploader
-              bookingId={bookingId}
-              stage="Before"
-              onUploaded={handlePhotoUploaded}
-            />
+        {/* Before photo upload (only after Accept) */}
+        {workStatus === "Assigned" &&
+          response === "Accepted" &&
+          !beforeUploaded &&
+          !photoLoadError && (
+            <div className="mt-6">
+              <PhotoUploader
+                bookingId={bookingId}
+                stage="Before"
+                onUploaded={handlePhotoUploaded}
+              />
 
-            <p className="mt-2 text-xs text-muted">
-              Upload a Before photo to start work.
-            </p>
-          </div>
-        )}
+              <p className="mt-2 text-xs text-muted">
+                Upload a Before photo to start work.
+              </p>
+            </div>
+          )}
 
         {/* In Progress photo upload */}
         {workStatus === "In Progress" && !inProgressUploaded && (
@@ -420,8 +552,8 @@ function JobDetails() {
             </div>
           )}
 
-        {/* Start Work */}
-        {workStatus === "Assigned" && (
+        {/* Start Work (only after Accept) */}
+        {workStatus === "Assigned" && response === "Accepted" && (
           <button
             type="button"
             onClick={handleStart}
@@ -490,7 +622,7 @@ function JobDetails() {
           </button>
         )}
 
-        {/* Start / Complete error from the server */}
+        {/* Error from the server */}
         {actionError && (
           <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-sm text-red-400">
             {actionError}

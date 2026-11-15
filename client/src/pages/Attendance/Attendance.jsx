@@ -1,11 +1,18 @@
+// client/src/pages/Attendance/Attendance.jsx
+// WHY: Employee attendance: Clock In / Clock Out, today's sessions, and the last 7 days history.
+// APIs: services/attendanceService.js (today, clock-in, clock-out, history), services/jobService.js (active job check).
+// RULES: many sessions per day (lead); Clock Out is disabled while a job is In Progress (backend also blocks it).
 
 import { useCallback, useEffect, useState } from "react";
+import { LuClock, LuLogIn, LuLogOut } from "react-icons/lu";
+
 import {
-  LuClock,
-  LuLogIn,
-  LuLogOut,
-} from "react-icons/lu";
-import api from "../../services/api";
+  getToday,
+  clockIn,
+  clockOut,
+  getHistory,
+} from "../../services/attendanceService";
+import { getMyJobs } from "../../services/jobService";
 
 // Format time using Sri Lanka timezone
 const formatTime = (iso) =>
@@ -19,6 +26,15 @@ const formatTime = (iso) =>
 const formatDuration = (mins = 0) =>
   `${Math.floor(mins / 60)}h ${mins % 60}m`;
 
+// Turn "2026-11-14" into "Sat, 14 Nov".
+// Noon avoids the date shifting by a day in other time zones.
+const formatDay = (dateString) =>
+  new Date(`${dateString}T12:00:00`).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
 function Attendance() {
   const [sessions, setSessions] = useState([]);
   const [current, setCurrent] = useState(null);
@@ -29,19 +45,25 @@ function Attendance() {
   const [error, setError] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // TODO: Connect booking API when Booking schema is ready.
-  const hasActiveJob = false;
+  // History (last 7 days)
+  const [historyDays, setHistoryDays] = useState([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState(false);
+
+  // True while one of my jobs is In Progress (Clock Out is blocked then).
+  const [hasActiveJob, setHasActiveJob] = useState(false);
 
   // 1. Load today's attendance
   const loadToday = useCallback(async () => {
     try {
       setError("");
 
-      const res = await api.get("/attendance/today");
+      const data = await getToday();
 
-      setSessions(res.data.sessions || []);
-      setCurrent(res.data.current || null);
-      setTotalMinutes(res.data.totalMinutes || 0);
+      setSessions(data.sessions || []);
+      setCurrent(data.current || null);
+      setTotalMinutes(data.totalMinutes || 0);
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -52,42 +74,74 @@ function Attendance() {
     }
   }, []);
 
+  // 2. Load the last 7 days
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistoryError(false);
+
+      const data = await getHistory();
+
+      setHistoryDays(data.days || []);
+      setHistoryTotal(data.totalMinutes || 0);
+    } catch (err) {
+      console.error("Failed to load attendance history:", err);
+      setHistoryError(true);
+      setHistoryDays([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  // 3. Check whether I have a job In Progress
+  const loadActiveJob = useCallback(async () => {
+    try {
+      const jobs = await getMyJobs();
+      setHasActiveJob(jobs.some((job) => job.status === "In Progress"));
+    } catch (err) {
+      // If jobs cannot load, leave Clock Out enabled; the backend still blocks it.
+      console.error("Failed to check active job:", err);
+      setHasActiveJob(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadToday();
-  }, [loadToday]);
+    loadHistory();
+    loadActiveJob();
+  }, [loadToday, loadHistory, loadActiveJob]);
 
-  // 2. Clock In
+  // Clock In
   const handleClockIn = async () => {
     setError("");
     setBusy(true);
 
     try {
-      await api.post("/attendance/clock-in");
+      await clockIn();
 
       await loadToday();
+      await loadHistory();
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          "Clock in failed. Please try again."
+        err.response?.data?.message || "Clock in failed. Please try again."
       );
     } finally {
       setBusy(false);
     }
   };
 
-  // 3. Clock Out
+  // Clock Out
   const handleClockOut = async () => {
     setError("");
     setBusy(true);
 
     try {
-      await api.post("/attendance/clock-out");
+      await clockOut();
 
       await loadToday();
+      await loadHistory();
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          "Clock out failed. Please try again."
+        err.response?.data?.message || "Clock out failed. Please try again."
       );
     } finally {
       setBusy(false);
@@ -95,16 +149,12 @@ function Attendance() {
     }
   };
 
-  // 4. Loading
+  // Loading
   if (loading) {
-    return (
-      <div className="p-4 text-muted">
-        Loading attendance...
-      </div>
-    );
+    return <div className="p-4 text-muted">Loading attendance...</div>;
   }
 
-  // 5. Attendance status
+  // Attendance status
   let label = "Not clocked in";
 
   if (current) {
@@ -114,7 +164,7 @@ function Attendance() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4 pb-24">
       {/* Page heading */}
       <h1 className="font-heading text-2xl font-semibold text-ink">
         Attendance
@@ -208,9 +258,7 @@ function Attendance() {
               >
                 <span className="font-mono text-ink">
                   {formatTime(session.clockIn)} -{" "}
-                  {session.clockOut
-                    ? formatTime(session.clockOut)
-                    : "Now"}
+                  {session.clockOut ? formatTime(session.clockOut) : "Now"}
                 </span>
 
                 <span className="font-mono text-muted">
@@ -221,6 +269,87 @@ function Attendance() {
               </li>
             ))}
           </ul>
+        )}
+      </div>
+
+      {/* Last 7 days history */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="font-heading text-lg font-semibold text-ink">
+            Last 7 days
+          </h2>
+
+          {!historyLoading && !historyError && (
+            <span className="font-mono text-sm text-teal">
+              {formatDuration(historyTotal)}
+            </span>
+          )}
+        </div>
+
+        {/* Loading skeleton */}
+        {historyLoading && (
+          <div className="mt-3 space-y-3">
+            <div className="h-20 animate-pulse rounded-xl bg-elevated/60" />
+            <div className="h-20 animate-pulse rounded-xl bg-elevated/60" />
+          </div>
+        )}
+
+        {/* Error */}
+        {!historyLoading && historyError && (
+          <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+            Unable to load attendance history. Please refresh and try again.
+          </p>
+        )}
+
+        {/* Empty */}
+        {!historyLoading && !historyError && historyDays.length === 0 && (
+          <p className="mt-3 text-sm text-muted">
+            No attendance records in the last 7 days.
+          </p>
+        )}
+
+        {/* Days */}
+        {!historyLoading && !historyError && historyDays.length > 0 && (
+          <div className="mt-3 space-y-3">
+            {historyDays.map((day) => (
+              <section
+                key={day.date}
+                className="rounded-xl border border-line bg-surface p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-ink">
+                    {formatDay(day.date)}
+                  </h3>
+
+                  <span className="font-mono text-sm text-teal">
+                    {formatDuration(day.totalMinutes)}
+                  </span>
+                </div>
+
+                <ul className="mt-2 space-y-1">
+                  {day.sessions.map((session) => (
+                    <li
+                      key={session._id}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <span className="font-mono text-muted">
+                        {formatTime(session.clockIn)} -{" "}
+                        {session.clockOut
+                          ? formatTime(session.clockOut)
+                          : "Now"}
+                      </span>
+
+                      <span className="font-mono text-muted">
+                        {session.clockOut
+                          ? formatDuration(session.workedMinutes)
+                          : "In progress"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
       </div>
 

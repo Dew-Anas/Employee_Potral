@@ -123,3 +123,13 @@ export async function completeJob(id) {
   const res = await api.put(`/employee/jobs/${id}/complete`);
   return res.data;
 }
+
+
+// Accept or Decline an assigned job. reason is optional and only used for Declined.
+export async function respondToJob(id, response, reason = "") {
+  const res = await api.put(`/employee/jobs/${id}/respond`, {
+    response,
+    reason,
+  });
+  return res.data;
+}
