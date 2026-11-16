@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route,Outlet } from "react-router-dom";
+
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -11,14 +12,14 @@ import Profile from "./pages/Profile/Profile";
 import Register from "./pages/Auth/Register";
 import Attendance from "./pages/Attendance/Attendance";
 
-
-
+// Common layout for authenticated employees
 function EmployeeLayout() {
   return (
     <>
-      <div className="pb-24">
-        <Outlet /> 
+      <div className="min-h-screen pb-24 lg:pb-0 lg:pl-64">
+        <Outlet />
       </div>
+
       <EmployeeNavigation />
     </>
   );
@@ -27,28 +28,44 @@ function EmployeeLayout() {
 function App() {
   return (
     <ThemeProvider>
-    <BrowserRouter>
-      <Routes>
-        
-        <Route path="/login" element={<Login />} />
+      <BrowserRouter>
+        <Routes>
 
-        <Route path="/register" element={<Register />} />
-        
-        <Route element={<ProtectedRoute />}>
-          <Route element={<EmployeeLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/assignments" element={<Assignments />} />
-            <Route path="/assignments/:id" element={<JobDetails />} />
-            <Route
-              path="attendance" element={<Attendance/>}
-            />
-            <Route path="/profile" element={<Profile />} />
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
-            
+          {/* Protected employee routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<EmployeeLayout />}>
+
+              <Route path="/" element={<Dashboard />} />
+
+              <Route
+                path="/assignments"
+                element={<Assignments />}
+              />
+
+              <Route
+                path="/assignments/:id"
+                element={<JobDetails />}
+              />
+
+              <Route
+                path="/attendance"
+                element={<Attendance />}
+              />
+
+              <Route
+                path="/profile"
+                element={<Profile />}
+              />
+
+            </Route>
           </Route>
-        </Route>
-      </Routes>
-    </BrowserRouter>
+
+        </Routes>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

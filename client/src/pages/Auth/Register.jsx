@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../services/api";
@@ -16,6 +15,11 @@ const TEXT_FIELDS = [
   { name: "nicNumber", label: "NIC number", type: "text" },
 ];
 
+const PASSWORD_FIELDS = [
+  { name: "password", label: "Password (min 8 characters)" },
+  { name: "confirmPassword", label: "Confirm password" },
+];
+
 const inputClass =
   "mt-1 w-full rounded-xl border border-line bg-elevated px-3 py-2.5 text-ink outline-none focus:border-primary";
 
@@ -27,16 +31,20 @@ const IMAGE_FIELDS = [
   { name: "profilePhoto", label: "Profile Photo" },
 ];
 
+const emptyForm = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: "",
+  nicNumber: "",
+  skillCategory: "",
+  password: "",
+  confirmPassword: "",
+};
+
 function Register() {
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    address: "",
-    nicNumber: "",
-    skillCategory: "",
-  });
+  const [form, setForm] = useState(emptyForm);
 
   const [images, setImages] = useState({
     nicFrontImage: null,
@@ -61,7 +69,6 @@ function Register() {
           err.response?.data?.message ||
             "Could not load skills. Please refresh the page."
         );
-
         window.scrollTo({ top: 0, behavior: "smooth" });
       } finally {
         setLoadingSkills(false);
@@ -71,17 +78,11 @@ function Register() {
     loadCategories();
   }, []);
 
-  // Text input change
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Image change
   const handleImageChange = (e) => {
     const { name, files } = e.target;
     const file = files[0];
@@ -103,13 +104,14 @@ function Register() {
       return;
     }
 
-    setImages((prev) => ({
-      ...prev,
-      [name]: file,
-    }));
+    setImages((prev) => ({ ...prev, [name]: file }));
   };
 
-  // Submit registration
+  const fail = (message) => {
+    setError(message);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -123,55 +125,32 @@ function Register() {
     const address = form.address.trim();
     const nicNumber = form.nicNumber.trim().toUpperCase();
 
-    // Required fields
     if (!firstName || !lastName || !address) {
-      setError("First name, last name and address are required.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return fail("First name, last name and address are required.");
     }
-
-    // Email
     if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return fail("Please enter a valid email address.");
     }
-
-    // Phone
     if (!phoneRegex.test(phone)) {
-      setError("Please enter a valid phone number (9-15 digits).");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return fail("Please enter a valid phone number (9-15 digits).");
     }
-
-    // NIC
     if (!nicRegex.test(nicNumber)) {
-      setError("Please enter a valid NIC number.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return fail("Please enter a valid NIC number.");
     }
-
-    // Skill
+    if (form.password.length < 8) {
+      return fail("Password must be at least 8 characters.");
+    }
+    if (form.password !== form.confirmPassword) {
+      return fail("Passwords do not match.");
+    }
     if (!form.skillCategory) {
-      setError("Please select your skill.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return fail("Please select your skill.");
+    }
+    if (!images.nicFrontImage || !images.nicBackImage || !images.profilePhoto) {
+      return fail("NIC front, NIC back and profile photo are required.");
     }
 
-    // Images
-    if (
-      !images.nicFrontImage ||
-      !images.nicBackImage ||
-      !images.profilePhoto
-    ) {
-      setError("NIC front, NIC back and profile photo are required.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    // FormData
     const formData = new FormData();
-
     formData.append("firstName", firstName);
     formData.append("lastName", lastName);
     formData.append("email", email);
@@ -179,7 +158,7 @@ function Register() {
     formData.append("address", address);
     formData.append("nicNumber", nicNumber);
     formData.append("skillCategory", form.skillCategory);
-
+    formData.append("password", form.password);
     formData.append("nicFrontImage", images.nicFrontImage);
     formData.append("nicBackImage", images.nicBackImage);
     formData.append("profilePhoto", images.profilePhoto);
@@ -193,36 +172,13 @@ function Register() {
         res.data.message ||
           "Registration submitted successfully. Please wait for admin approval."
       );
-
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      // Reset form
-      setForm({
-        firstName: "",
-        lastName: "",
-        email: "",
-        phone: "",
-        address: "",
-        nicNumber: "",
-        skillCategory: "",
-      });
-
-      setImages({
-        nicFrontImage: null,
-        nicBackImage: null,
-        profilePhoto: null,
-      });
-
+      setForm(emptyForm);
+      setImages({ nicFrontImage: null, nicBackImage: null, profilePhoto: null });
       e.target.reset();
-
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          "Registration failed. Please try again."
-      );
-
-      window.scrollTo({ top: 0, behavior: "smooth" });
-
+      fail(err.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -239,31 +195,25 @@ function Register() {
         </h1>
 
         <p className="mt-1 text-sm text-muted">
-          Your request will be reviewed by an admin before your account
-          is activated.
+          Your request will be reviewed by an admin before your account is
+          activated.
         </p>
 
-        {/* Error */}
         {error && (
           <p className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
             {error}
           </p>
         )}
 
-        {/* Success */}
         {success && (
           <p className="mt-4 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm text-green-400">
             {success}
           </p>
         )}
 
-        {/* Text fields */}
         {TEXT_FIELDS.map((f) => (
           <div key={f.name} className="mt-4">
-            <label className="block text-sm text-muted">
-              {f.label}
-            </label>
-
+            <label className="block text-sm text-muted">{f.label}</label>
             <input
               type={f.type}
               name={f.name}
@@ -275,12 +225,23 @@ function Register() {
           </div>
         ))}
 
-        {/* Skills */}
-        <div className="mt-4">
-          <label className="block text-sm text-muted">
-            Skill / service offered
-          </label>
+        {PASSWORD_FIELDS.map((f) => (
+          <div key={f.name} className="mt-4">
+            <label className="block text-sm text-muted">{f.label}</label>
+            <input
+              type="password"
+              name={f.name}
+              value={form[f.name]}
+              onChange={handleChange}
+              className={inputClass}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+        ))}
 
+        <div className="mt-4">
+          <label className="block text-sm text-muted">Skill / service offered</label>
           <select
             name="skillCategory"
             value={form.skillCategory}
@@ -290,11 +251,8 @@ function Register() {
             required
           >
             <option value="">
-              {loadingSkills
-                ? "Loading skills..."
-                : "Select your skill"}
+              {loadingSkills ? "Loading skills..." : "Select your skill"}
             </option>
-
             {categories.map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name}
@@ -303,13 +261,9 @@ function Register() {
           </select>
         </div>
 
-        {/* Image uploads */}
         {IMAGE_FIELDS.map((f) => (
           <div key={f.name} className="mt-4">
-            <label className="block text-sm text-muted">
-              {f.label}
-            </label>
-
+            <label className="block text-sm text-muted">{f.label}</label>
             <input
               type="file"
               name={f.name}
@@ -318,7 +272,6 @@ function Register() {
               className="mt-1 w-full text-sm text-ink"
               required
             />
-
             {images[f.name] && (
               <p className="mt-1 text-xs text-green-400">
                 Selected: {images[f.name].name}
@@ -327,7 +280,6 @@ function Register() {
           </div>
         ))}
 
-        {/* Submit */}
         <button
           type="submit"
           disabled={submitting || loadingSkills}
@@ -336,7 +288,6 @@ function Register() {
           {submitting ? "Submitting..." : "Submit Registration"}
         </button>
 
-        {/* Login link */}
         <p className="mt-4 text-center text-sm text-muted">
           Already registered?{" "}
           <Link to="/login" className="font-medium text-primary">

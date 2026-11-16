@@ -1,4 +1,11 @@
+// TEMP-DB: Writes to the shared `users` collection (owner: Dev_B / admin) so the
+// admin Users page shows the registration, plus our own `employeeprofiles` collection
+// (NIC, photos, address). Employee stays inactive until admin activates the account.
+// TODO(merge): Dev_B should add address / nicNumber / profile fields to their User schema
+// if admin needs to see them.
 
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 const EmployeeProfile = require("../models/EmployeeProfile");
 const Category = require("../models/Category");
 const User = require("../models/User");
@@ -7,7 +14,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const nicRegex = /^(\d{9}[VvXx]|\d{12})$/;
 const phoneRegex = /^\+?\d{9,15}$/;
 
-// Multer file → { data, contentType }
+// Multer file -> { data, contentType }
 const toImage = (file) => ({
   data: file.buffer,
   contentType: file.mimetype,
@@ -18,8 +25,7 @@ const submitRegistration = async (req, res) => {
     const b = req.body || {};
     const files = req.files || {};
 
-    const clean = (v) =>
-      typeof v === "string" ? v.trim() : "";
+    const clean = (v) => (typeof v === "string" ? v.trim() : "");
 
     const firstName = clean(b.firstName);
     const lastName = clean(b.lastName);
@@ -28,8 +34,9 @@ const submitRegistration = async (req, res) => {
     const address = clean(b.address);
     const nicNumber = clean(b.nicNumber).toUpperCase();
     const skillCategory = clean(b.skillCategory);
+    const password = typeof b.password === "string" ? b.password : "";
 
-    // 1. Required field validation
+    // 1. Required fields
     if (!firstName || !lastName || !address) {
       return res.status(400).json({
         success: false,
@@ -37,63 +44,51 @@ const submitRegistration = async (req, res) => {
       });
     }
 
-    // 2. Email validation
+    // 2. Email
     if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid email is required",
-      });
+      return res.status(400).json({ success: false, message: "A valid email is required" });
     }
 
-    // 3. Phone validation
+    // 3. Phone
     if (!phoneRegex.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid phone number is required",
-      });
+      return res.status(400).json({ success: false, message: "A valid phone number is required" });
     }
 
-    // 4. NIC validation
+    // 4. NIC
     if (!nicRegex.test(nicNumber)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid NIC number is required",
-      });
+      return res.status(400).json({ success: false, message: "A valid NIC number is required" });
     }
 
-    // 5. All three images are required
-    if (
-      !files.nicFrontImage?.[0] ||
-      !files.nicBackImage?.[0] ||
-      !files.profilePhoto?.[0]
-    ) {
+    // 5. Password
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Password must be at least 8 characters" });
+    }
+
+    // 6. Images
+    if (!files.nicFrontImage?.[0] || !files.nicBackImage?.[0] || !files.profilePhoto?.[0]) {
       return res.status(400).json({
         success: false,
         message: "NIC front, NIC back and profile photo are required",
       });
     }
 
-    // 6. Active category validation
-    const categoryOk = await Category.exists({
-      _id: skillCategory,
-      status: "Active",
-    });
-
-    if (!categoryOk) {
-      return res.status(400).json({
-        success: false,
-        message: "Please select a valid skill",
-      });
+    // 7. Active category (its name becomes the employee's skill, same as admin skills)
+    if (!mongoose.isValidObjectId(skillCategory)) {
+      return res.status(400).json({ success: false, message: "Please select a valid skill" });
     }
 
-    // 7. Duplicate email / NIC validation
-    const userExists = await User.exists({ email });
+    const category = await Category.findOne({ _id: skillCategory, status: "Active" });
+    if (!category) {
+      return res.status(400).json({ success: false, message: "Please select a valid skill" });
+    }
 
+    // 8. Duplicates
+    const userExists = await User.exists({ email });
     const requestExists = await EmployeeProfile.exists({
       $or: [{ email }, { nicNumber }],
-      registrationStatus: {
-        $in: ["Pending Approval", "Approved"],
-      },
+      registrationStatus: { $in: ["Pending Approval", "Approved"] },
     });
 
     if (userExists || requestExists) {
@@ -103,29 +98,45 @@ const submitRegistration = async (req, res) => {
       });
     }
 
-    // 8. Save registration as Pending Approval
-    await EmployeeProfile.create({
+    // 9. Create the shared user (inactive until admin activates)
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await User.create({
       firstName,
       lastName,
       email,
       phone,
-      address,
-      nicNumber,
-      skillCategory,
-
-      nicFrontImage: toImage(files.nicFrontImage[0]),
-      nicBackImage: toImage(files.nicBackImage[0]),
-      profilePhoto: toImage(files.profilePhoto[0]),
-
-      registrationStatus: "Pending Approval",
+      password: hashedPassword,
+      role: "employee",
+      skills: [category.name],
+      isActive: false,
     });
+
+    // 10. Create our profile record; roll back the user if this fails
+    try {
+      await EmployeeProfile.create({
+        firstName,
+        lastName,
+        email,
+        phone,
+        address,
+        nicNumber,
+        skillCategory,
+        nicFrontImage: toImage(files.nicFrontImage[0]),
+        nicBackImage: toImage(files.nicBackImage[0]),
+        profilePhoto: toImage(files.profilePhoto[0]),
+        registrationStatus: "Pending Approval",
+        user: user._id,
+      });
+    } catch (profileErr) {
+      await User.deleteOne({ _id: user._id });
+      throw profileErr;
+    }
 
     return res.status(201).json({
       success: true,
-      message:
-        "Registration submitted. You will be able to log in after admin approval.",
+      message: "Registration submitted. You will be able to log in after admin approval.",
     });
-
   } catch (err) {
     console.error("Registration error:", err.message);
 

@@ -120,5 +120,3 @@ module.exports = mongoose.model(
   employeeProfileSchema
 );
 
-module.exports = mongoose.model("EmployeeProfile", employeeProfileSchema);
-

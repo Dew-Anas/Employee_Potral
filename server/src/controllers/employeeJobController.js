@@ -2,6 +2,7 @@
 // WHY: Gives the logged-in employee ONLY their own assigned jobs (Booking.employee = me).
 // ROUTES: GET /api/employee/jobs and GET /api/employee/jobs/:id (routes/employeeJobRoutes.js; protect + employeeOnly)
 // DATA CHAIN: Booking -> quotation -> Quotation -> request -> ServiceRequest -> customer (User) + service (Service)
+// EXTRA: each job carries `response` ("Accepted" | "Declined" | null) from assignmentresponses.
 // TODO(confirm): Dev_B Booking model assumed final (lead to confirm; Dev_A schema differs).
 // TODO(confirm): requestedTasks = Booking.tasks titles; additionalRequirements = ServiceRequest.description + Booking.notes.
 // Employee sees only these statuses: Assigned (= Pending in the portal), In Progress, Completed.
@@ -9,6 +10,7 @@
 const mongoose = require("mongoose");
 
 const Booking = require("../models/Booking");
+const AssignmentResponse = require("../models/AssignmentResponse");
 // Models below must be loaded so populate() can find them.
 require("../models/Quotation");
 require("../models/ServiceRequest");
@@ -30,7 +32,7 @@ const chainPopulate = {
 };
 
 // Convert a populated booking into the shape the React UI expects.
-const toJobDTO = (booking) => {
+const toJobDTO = (booking, response) => {
   const request = booking.quotation?.request;
   const customer = request?.customer;
   const service = request?.service;
@@ -54,6 +56,7 @@ const toJobDTO = (booking) => {
     scheduledAt: booking.scheduledStart,
     scheduledEnd: booking.scheduledEnd,
     status: booking.status,
+    response: response || null,
     requestedTasks: (booking.tasks || []).map((task) => task.title),
     additionalRequirements,
   };
@@ -70,9 +73,21 @@ const getMyJobs = async (req, res) => {
       .sort({ scheduledStart: 1 })
       .lean();
 
+    // One query for all answers, then match by booking id.
+    const responses = await AssignmentResponse.find({
+      employee: req.user._id,
+      booking: { $in: bookings.map((booking) => booking._id) },
+    }).lean();
+
+    const responseByBooking = new Map(
+      responses.map((item) => [item.booking.toString(), item.response])
+    );
+
     return res.json({
       success: true,
-      jobs: bookings.map(toJobDTO),
+      jobs: bookings.map((booking) =>
+        toJobDTO(booking, responseByBooking.get(booking._id.toString()))
+      ),
     });
   } catch (error) {
     console.error("getMyJobs error:", error.message);
@@ -112,9 +127,14 @@ const getMyJobById = async (req, res) => {
       });
     }
 
+    const answer = await AssignmentResponse.findOne({
+      booking: booking._id,
+      employee: req.user._id,
+    }).lean();
+
     return res.json({
       success: true,
-      job: toJobDTO(booking),
+      job: toJobDTO(booking, answer?.response),
     });
   } catch (error) {
     console.error("getMyJobById error:", error.message);
