@@ -1,35 +1,24 @@
+// Employee self-registration. POST /registrations (multipart): details, password, skill
+// (category id), NIC front/back and profile photo. The account stays inactive until an
+// admin activates it. Same validation rules as the backend registrationController.
+
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { LuCheck } from "react-icons/lu";
 import api from "../../services/api";
+import AuthShell from "../../components/auth/AuthShell";
+import {
+  TextField,
+  PasswordField,
+  SelectField,
+  FileField,
+} from "../../components/auth/AuthFields";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^\+?\d{9,15}$/;
 const nicRegex = /^(\d{9}[VvXx]|\d{12})$/;
 
-const TEXT_FIELDS = [
-  { name: "firstName", label: "First name", type: "text" },
-  { name: "lastName", label: "Last name", type: "text" },
-  { name: "email", label: "Email address", type: "email" },
-  { name: "phone", label: "Phone number", type: "tel" },
-  { name: "address", label: "Residential address", type: "text" },
-  { name: "nicNumber", label: "NIC number", type: "text" },
-];
-
-const PASSWORD_FIELDS = [
-  { name: "password", label: "Password (min 8 characters)" },
-  { name: "confirmPassword", label: "Confirm password" },
-];
-
-const inputClass =
-  "mt-1 w-full rounded-xl border border-line bg-elevated px-3 py-2.5 text-ink outline-none focus:border-primary";
-
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
-
-const IMAGE_FIELDS = [
-  { name: "nicFrontImage", label: "NIC Front Image" },
-  { name: "nicBackImage", label: "NIC Back Image" },
-  { name: "profilePhoto", label: "Profile Photo" },
-];
 
 const emptyForm = {
   firstName: "",
@@ -43,22 +32,26 @@ const emptyForm = {
   confirmPassword: "",
 };
 
+const emptyImages = { nicFrontImage: null, nicBackImage: null, profilePhoto: null };
+
+function SectionTitle({ children }) {
+  return (
+    <div className="border-t border-line pt-6">
+      <h2 className="font-heading text-sm font-bold text-ink">{children}</h2>
+    </div>
+  );
+}
+
 function Register() {
   const [form, setForm] = useState(emptyForm);
-
-  const [images, setImages] = useState({
-    nicFrontImage: null,
-    nicBackImage: null,
-    profilePhoto: null,
-  });
+  const [images, setImages] = useState(emptyImages);
 
   const [categories, setCategories] = useState([]);
   const [loadingSkills, setLoadingSkills] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [submitted, setSubmitted] = useState("");
 
-  // Load categories
   useEffect(() => {
     const loadCategories = async () => {
       try {
@@ -66,10 +59,8 @@ function Register() {
         setCategories(res.data.categories || []);
       } catch (err) {
         setError(
-          err.response?.data?.message ||
-            "Could not load skills. Please refresh the page."
+          err.response?.data?.message || "Could not load skills. Please refresh the page."
         );
-        window.scrollTo({ top: 0, behavior: "smooth" });
       } finally {
         setLoadingSkills(false);
       }
@@ -78,32 +69,9 @@ function Register() {
     loadCategories();
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleImageChange = (e) => {
-    const { name, files } = e.target;
-    const file = files[0];
-
-    if (!file) return;
-
+  const setField = (name) => (value) => setForm((prev) => ({ ...prev, [name]: value }));
+  const setImage = (name) => (file) => {
     setError("");
-    setSuccess("");
-
-    if (!["image/jpeg", "image/png"].includes(file.type)) {
-      setError("Only JPG or PNG images are allowed.");
-      e.target.value = "";
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setError("Each image must be less than or equal to 1MB.");
-      e.target.value = "";
-      return;
-    }
-
     setImages((prev) => ({ ...prev, [name]: file }));
   };
 
@@ -114,9 +82,7 @@ function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setError("");
-    setSuccess("");
 
     const firstName = form.firstName.trim();
     const lastName = form.lastName.trim();
@@ -128,24 +94,12 @@ function Register() {
     if (!firstName || !lastName || !address) {
       return fail("First name, last name and address are required.");
     }
-    if (!emailRegex.test(email)) {
-      return fail("Please enter a valid email address.");
-    }
-    if (!phoneRegex.test(phone)) {
-      return fail("Please enter a valid phone number (9-15 digits).");
-    }
-    if (!nicRegex.test(nicNumber)) {
-      return fail("Please enter a valid NIC number.");
-    }
-    if (form.password.length < 8) {
-      return fail("Password must be at least 8 characters.");
-    }
-    if (form.password !== form.confirmPassword) {
-      return fail("Passwords do not match.");
-    }
-    if (!form.skillCategory) {
-      return fail("Please select your skill.");
-    }
+    if (!emailRegex.test(email)) return fail("Please enter a valid email address.");
+    if (!phoneRegex.test(phone)) return fail("Please enter a valid phone number (9-15 digits).");
+    if (!nicRegex.test(nicNumber)) return fail("Please enter a valid NIC number.");
+    if (!form.skillCategory) return fail("Please select your skill.");
+    if (form.password.length < 8) return fail("Password must be at least 8 characters.");
+    if (form.password !== form.confirmPassword) return fail("Passwords do not match.");
     if (!images.nicFrontImage || !images.nicBackImage || !images.profilePhoto) {
       return fail("NIC front, NIC back and profile photo are required.");
     }
@@ -165,18 +119,15 @@ function Register() {
 
     try {
       setSubmitting(true);
-
       const res = await api.post("/registrations", formData);
 
-      setSuccess(
+      setSubmitted(
         res.data.message ||
-          "Registration submitted successfully. Please wait for admin approval."
+          "Registration submitted. You will be able to sign in after admin approval."
       );
-      window.scrollTo({ top: 0, behavior: "smooth" });
-
       setForm(emptyForm);
-      setImages({ nicFrontImage: null, nicBackImage: null, profilePhoto: null });
-      e.target.reset();
+      setImages(emptyImages);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       fail(err.response?.data?.message || "Registration failed. Please try again.");
     } finally {
@@ -184,118 +135,172 @@ function Register() {
     }
   };
 
+  // Success screen
+  if (submitted) {
+    return (
+      <AuthShell title="Registration submitted">
+        <div className="rounded-2xl border border-line bg-surface p-6 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-teal/10 text-teal">
+            <LuCheck size={28} />
+          </div>
+          <p className="mt-4 text-sm leading-6 text-ink">{submitted}</p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            An administrator will review your details and activate your account.
+          </p>
+          <Link
+            to="/login"
+            className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-primary py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
+          >
+            Back to sign in
+          </Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-page px-4 py-8">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-line bg-surface p-6"
-      >
-        <h1 className="font-heading text-2xl font-semibold text-ink">
-          Register as Employee
-        </h1>
-
-        <p className="mt-1 text-sm text-muted">
-          Your request will be reviewed by an admin before your account is
-          activated.
-        </p>
-
+    <AuthShell
+      wide
+      title="Register as Employee"
+      subtitle="Fill in your details. An admin reviews every request before the account is activated."
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-6">
         {error && (
-          <p className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <p
+            role="alert"
+            className="rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-3 text-sm text-red-300"
+          >
             {error}
           </p>
         )}
 
-        {success && (
-          <p className="mt-4 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm text-green-400">
-            {success}
-          </p>
-        )}
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextField
+            label="First name"
+            value={form.firstName}
+            onChange={setField("firstName")}
+            autoComplete="given-name"
+          />
+          <TextField
+            label="Last name"
+            value={form.lastName}
+            onChange={setField("lastName")}
+            autoComplete="family-name"
+          />
+          <TextField
+            label="Email address"
+            type="email"
+            value={form.email}
+            onChange={setField("email")}
+            autoComplete="email"
+          />
+          <TextField
+            label="Phone number"
+            type="tel"
+            inputMode="tel"
+            value={form.phone}
+            onChange={setField("phone")}
+            autoComplete="tel"
+            placeholder="0771234567"
+          />
+        </div>
 
-        {TEXT_FIELDS.map((f) => (
-          <div key={f.name} className="mt-4">
-            <label className="block text-sm text-muted">{f.label}</label>
-            <input
-              type={f.type}
-              name={f.name}
-              value={form[f.name]}
-              onChange={handleChange}
-              className={inputClass}
-              required
-            />
-          </div>
-        ))}
+        <TextField
+          label="Residential address"
+          value={form.address}
+          onChange={setField("address")}
+          autoComplete="street-address"
+        />
 
-        {PASSWORD_FIELDS.map((f) => (
-          <div key={f.name} className="mt-4">
-            <label className="block text-sm text-muted">{f.label}</label>
-            <input
-              type="password"
-              name={f.name}
-              value={form[f.name]}
-              onChange={handleChange}
-              className={inputClass}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-        ))}
-
-        <div className="mt-4">
-          <label className="block text-sm text-muted">Skill / service offered</label>
-          <select
-            name="skillCategory"
+        <SectionTitle>Identity & skill</SectionTitle>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextField
+            label="NIC number"
+            value={form.nicNumber}
+            onChange={setField("nicNumber")}
+            placeholder="123456789V or 12 digits"
+          />
+          <SelectField
+            label="Skill / service offered"
             value={form.skillCategory}
-            onChange={handleChange}
+            onChange={setField("skillCategory")}
             disabled={loadingSkills}
-            className={inputClass}
-            required
           >
-            <option value="">
-              {loadingSkills ? "Loading skills..." : "Select your skill"}
-            </option>
+            <option value="">{loadingSkills ? "Loading skills..." : "Select your skill"}</option>
             {categories.map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </SelectField>
         </div>
 
-        {IMAGE_FIELDS.map((f) => (
-          <div key={f.name} className="mt-4">
-            <label className="block text-sm text-muted">{f.label}</label>
-            <input
-              type="file"
-              name={f.name}
+        <SectionTitle>Account password</SectionTitle>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <PasswordField
+            label="Password"
+            value={form.password}
+            onChange={setField("password")}
+            autoComplete="new-password"
+            hint="At least 8 characters."
+          />
+          <PasswordField
+            label="Confirm password"
+            value={form.confirmPassword}
+            onChange={setField("confirmPassword")}
+            autoComplete="new-password"
+          />
+        </div>
+
+        <SectionTitle>Documents</SectionTitle>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <FileField
+            label="NIC front"
+            hint="JPG or PNG, up to 1MB"
+            accept="image/jpeg,image/png"
+            maxSize={MAX_FILE_SIZE}
+            file={images.nicFrontImage}
+            onChange={setImage("nicFrontImage")}
+            onError={fail}
+          />
+          <FileField
+            label="NIC back"
+            hint="JPG or PNG, up to 1MB"
+            accept="image/jpeg,image/png"
+            maxSize={MAX_FILE_SIZE}
+            file={images.nicBackImage}
+            onChange={setImage("nicBackImage")}
+            onError={fail}
+          />
+          <div className="sm:col-span-2">
+            <FileField
+              label="Profile photo"
+              hint="A clear photo of your face, JPG or PNG, up to 1MB"
               accept="image/jpeg,image/png"
-              onChange={handleImageChange}
-              className="mt-1 w-full text-sm text-ink"
-              required
+              maxSize={MAX_FILE_SIZE}
+              file={images.profilePhoto}
+              onChange={setImage("profilePhoto")}
+              onError={fail}
             />
-            {images[f.name] && (
-              <p className="mt-1 text-xs text-green-400">
-                Selected: {images[f.name].name}
-              </p>
-            )}
           </div>
-        ))}
+        </div>
 
         <button
           type="submit"
           disabled={submitting || loadingSkills}
-          className="mt-6 w-full rounded-xl bg-primary py-2.5 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Submitting..." : "Submit Registration"}
+          {submitting ? "Submitting..." : "Submit registration"}
         </button>
 
-        <p className="mt-4 text-center text-sm text-muted">
+        <p className="text-center text-sm text-muted">
           Already registered?{" "}
-          <Link to="/login" className="font-medium text-primary">
+          <Link to="/login" className="font-semibold text-primary hover:text-primary/80">
             Sign in
           </Link>
         </p>
       </form>
-    </div>
+    </AuthShell>
   );
 }
 

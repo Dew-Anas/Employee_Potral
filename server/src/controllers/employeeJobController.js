@@ -1,9 +1,12 @@
 // server/src/controllers/employeeJobController.js
 // WHY: Gives the logged-in employee ONLY their own assigned jobs (Booking.employee = me).
 // ROUTES: GET /api/employee/jobs and GET /api/employee/jobs/:id (routes/employeeJobRoutes.js; protect + employeeOnly)
-// DATA CHAIN: Booking -> quotation -> Quotation -> request -> ServiceRequest -> customer (User) + service (Service)
+// DATA: customer / service / address are read straight from the booking (customer flow);
+//       if missing, from the chain Booking -> quotation -> ServiceRequest.
+// TIME: scheduledStart (admin) or, if not scheduled yet, preferredDate + preferredTime (customer).
 // EXTRA: each job carries `response` ("Accepted" | "Declined" | null) from assignmentresponses.
-// TODO(confirm): Dev_B Booking model assumed final (lead to confirm; Dev_A schema differs).
+// TODO(confirm): final Booking model + status values (lead). Status is normalised for the UI.
+// TODO(confirm): preferredTime is combined with preferredDate in the SERVER's local time zone.
 // TODO(confirm): requestedTasks = Booking.tasks titles; additionalRequirements = ServiceRequest.description + Booking.notes.
 // Employee sees only these statuses: Assigned (= Pending in the portal), In Progress, Completed.
 
@@ -11,31 +14,60 @@ const mongoose = require("mongoose");
 
 const Booking = require("../models/Booking");
 const AssignmentResponse = require("../models/AssignmentResponse");
+const { canonicalStatus, statusIn } = require("../utils/bookingStatus");
 // Models below must be loaded so populate() can find them.
 require("../models/Quotation");
 require("../models/ServiceRequest");
 require("../models/Service");
 require("../models/User");
 
-const VISIBLE_STATUSES = ["Assigned", "In Progress", "Completed"];
+const VISIBLE_STATUSES = statusIn("Assigned", "In Progress", "Completed");
 
-// Populate the full chain once, so both functions use the same query shape.
-const chainPopulate = {
-  path: "quotation",
-  populate: {
-    path: "request",
-    populate: [
-      { path: "customer", select: "firstName lastName phone" },
-      { path: "service", select: "name requiredSkills" },
-    ],
+// Populate everything once, so both functions use the same query shape.
+// strictPopulate:false = do not crash if a copy of a model lacks a path.
+const populateSpec = [
+  { path: "customer", select: "firstName lastName phone", strictPopulate: false },
+  { path: "service", select: "name requiredSkills", strictPopulate: false },
+  {
+    path: "quotation",
+    strictPopulate: false,
+    populate: {
+      path: "request",
+      strictPopulate: false,
+      populate: [
+        { path: "customer", select: "firstName lastName phone", strictPopulate: false },
+        { path: "service", select: "name requiredSkills", strictPopulate: false },
+      ],
+    },
   },
+];
+
+// Admin's scheduledStart, else the customer's preferred date + time.
+const toScheduledAt = (booking) => {
+  if (booking.scheduledStart) return booking.scheduledStart;
+  if (!booking.preferredDate) return null;
+
+  const day = new Date(booking.preferredDate);
+  if (Number.isNaN(day.getTime())) return null;
+
+  const [hours, minutes] = String(booking.preferredTime || "00:00")
+    .split(":")
+    .map(Number);
+
+  return new Date(
+    day.getUTCFullYear(),
+    day.getUTCMonth(),
+    day.getUTCDate(),
+    hours || 0,
+    minutes || 0
+  );
 };
 
 // Convert a populated booking into the shape the React UI expects.
 const toJobDTO = (booking, response) => {
   const request = booking.quotation?.request;
-  const customer = request?.customer;
-  const service = request?.service;
+  const customer = booking.customer?.firstName ? booking.customer : request?.customer;
+  const service = booking.service?.name ? booking.service : request?.service;
 
   const customerName = customer
     ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
@@ -52,10 +84,10 @@ const toJobDTO = (booking, response) => {
     requiredSkills: service?.requiredSkills || [],
     customerName,
     customerPhone: customer?.phone || "",
-    address: request?.address || "",
-    scheduledAt: booking.scheduledStart,
-    scheduledEnd: booking.scheduledEnd,
-    status: booking.status,
+    address: booking.address || request?.address || "",
+    scheduledAt: toScheduledAt(booking),
+    scheduledEnd: booking.scheduledEnd || null,
+    status: canonicalStatus(booking.status),
     response: response || null,
     requestedTasks: (booking.tasks || []).map((task) => task.title),
     additionalRequirements,
@@ -69,8 +101,7 @@ const getMyJobs = async (req, res) => {
       employee: req.user._id,
       status: { $in: VISIBLE_STATUSES },
     })
-      .populate(chainPopulate)
-      .sort({ scheduledStart: 1 })
+      .populate(populateSpec)
       .lean();
 
     // One query for all answers, then match by booking id.
@@ -83,12 +114,15 @@ const getMyJobs = async (req, res) => {
       responses.map((item) => [item.booking.toString(), item.response])
     );
 
-    return res.json({
-      success: true,
-      jobs: bookings.map((booking) =>
-        toJobDTO(booking, responseByBooking.get(booking._id.toString()))
-      ),
-    });
+    const jobs = bookings
+      .map((booking) => toJobDTO(booking, responseByBooking.get(booking._id.toString())))
+      .sort((a, b) => {
+        const timeA = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Infinity;
+        const timeB = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Infinity;
+        return timeA - timeB;
+      });
+
+    return res.json({ success: true, jobs });
   } catch (error) {
     console.error("getMyJobs error:", error.message);
 
@@ -117,7 +151,7 @@ const getMyJobById = async (req, res) => {
       employee: req.user._id,
       status: { $in: VISIBLE_STATUSES },
     })
-      .populate(chainPopulate)
+      .populate(populateSpec)
       .lean();
 
     if (!booking) {

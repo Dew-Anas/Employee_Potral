@@ -4,6 +4,7 @@
 // FLOW: Assigned -> Accept -> Before photo -> Start Work -> In Progress -> After photo + note -> Complete Work.
 // DEMO SWITCH: USING_DEMO_DATA (services/jobService.js). Demo = local state only. Real = backend API.
 // APIs: jobService (job, respond, start, complete), photoService, completionService, noteService.
+// UI: step tracker, status badge, sticky info column on desktop. Logic is unchanged.
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -14,6 +15,8 @@ import {
   LuPhone,
   LuUserRound,
   LuCircle,
+  LuCheck,
+  LuExternalLink,
 } from "react-icons/lu";
 
 import {
@@ -28,6 +31,46 @@ import { getCompletionGate } from "../../services/completionService";
 
 import PhotoUploader from "../../components/photos/PhotoUploader";
 import NotesPanel from "../../components/notes/NotesPanel";
+
+const formatWhen = (value) => {
+  if (!value) return "Schedule to be confirmed";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Schedule to be confirmed";
+
+  return date.toLocaleString("en-LK", { dateStyle: "full", timeStyle: "short" });
+};
+
+// Badge text + colour (same wording as the Assignments page).
+function getBadge(workStatus, response) {
+  if (workStatus === "In Progress") {
+    return { text: "In Progress", className: "bg-primary/15 text-primary" };
+  }
+
+  if (workStatus === "Completed") {
+    return { text: "Completed", className: "bg-teal/15 text-teal" };
+  }
+
+  if (response === "Accepted") {
+    return { text: "Accepted", className: "bg-teal/15 text-teal" };
+  }
+
+  if (response === "Declined") {
+    return { text: "Declined", className: "bg-amber-500/15 text-amber-400" };
+  }
+
+  return { text: "Awaiting response", className: "bg-primary/15 text-primary" };
+}
+
+function Card({ title, subtitle, children, className = "" }) {
+  return (
+    <section className={`rounded-2xl border border-line bg-surface p-5 ${className}`}>
+      {title && <h2 className="font-heading text-base font-bold">{title}</h2>}
+      {subtitle && <p className="mt-1 text-xs text-muted">{subtitle}</p>}
+      <div className={title ? "mt-4" : ""}>{children}</div>
+    </section>
+  );
+}
 
 function JobDetails() {
   const { id } = useParams();
@@ -267,8 +310,9 @@ function JobDetails() {
 
   if (loading || photosLoading) {
     return (
-      <main className="min-h-screen bg-page p-6 text-muted">
-        Loading job...
+      <main className="min-h-screen bg-page px-4 pt-10 text-center text-muted" role="status">
+        <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-line border-t-primary" />
+        <p className="mt-4 text-sm">Loading job...</p>
       </main>
     );
   }
@@ -276,22 +320,50 @@ function JobDetails() {
   if (!job) {
     return (
       <main className="min-h-screen bg-page px-4 pt-6 text-ink">
-        <Link to="/assignments" className="text-teal">
-          Back to assignments
-        </Link>
+        <div className="mx-auto max-w-2xl">
+          <Link
+            to="/assignments"
+            className="inline-flex items-center gap-2 text-sm text-muted hover:text-ink"
+          >
+            <LuArrowLeft />
+            Assignments
+          </Link>
 
-        <p className="mt-6 text-muted">This job was not found.</p>
+          <div className="mt-6 rounded-2xl border border-line bg-surface p-8 text-center">
+            <p className="text-sm font-semibold">This job was not found.</p>
+            <p className="mt-1 text-xs text-muted">
+              It may have been reassigned or removed by the admin.
+            </p>
+          </div>
+        </div>
       </main>
     );
   }
 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    job.address
+    job.address || ""
   )}`;
 
+  const badge = getBadge(workStatus, response);
+
+  // Step tracker (the first step that is not done is the current one).
+  const accepted = response === "Accepted" || workStatus !== "Assigned";
+  const started = workStatus === "In Progress" || workStatus === "Completed";
+
+  const steps = [
+    { label: "Accept job", done: accepted },
+    { label: "Before photo", done: beforeUploaded },
+    { label: "Start work", done: started },
+    { label: "Progress photo (50%)", done: inProgressUploaded },
+    { label: "After photo", done: afterUploaded },
+    { label: "Complete work", done: workStatus === "Completed" },
+  ];
+
+  const currentStep = steps.findIndex((step) => !step.done);
+
   return (
-    <main className="min-h-screen bg-page px-4 pb-28 pt-6 text-ink">
-      <div className="mx-auto max-w-2xl">
+    <main className="min-h-screen bg-page px-4 pb-28 pt-5 text-ink sm:px-6 lg:px-10 lg:pb-10">
+      <div className="mx-auto max-w-5xl">
         {/* Back navigation */}
         <Link
           to="/assignments"
@@ -303,341 +375,385 @@ function JobDetails() {
 
         {/* Job heading */}
         <div className="mt-4 flex items-start justify-between gap-3">
-          <h1 className="font-heading text-2xl font-semibold">
-            {job.serviceName}
-          </h1>
+          <div className="min-w-0">
+            <h1 className="font-heading text-xl font-bold tracking-tight sm:text-2xl">
+              {job.serviceName}
+            </h1>
+            {job.bookingId && (
+              <p className="mt-1 font-mono text-xs text-muted">{job.bookingId}</p>
+            )}
+          </div>
 
-          <span className="rounded-full bg-teal/15 px-3 py-1 text-xs font-medium text-teal">
-            {workStatus}
+          <span
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${badge.className}`}
+          >
+            {badge.text}
           </span>
         </div>
 
-        {/* Customer and booking details */}
-        <section className="mt-6 space-y-4 rounded-2xl border border-line bg-surface p-4">
-          <p className="flex items-center gap-3">
-            <LuUserRound className="text-muted" />
-            {job.customerName}
-          </p>
-
-          <a
-            href={`tel:${job.customerPhone}`}
-            className="flex items-center gap-3 text-primary"
-          >
-            <LuPhone className="text-muted" />
-            {job.customerPhone}
-          </a>
-
-          <p className="flex items-center gap-3">
-            <LuCalendarClock className="text-muted" />
-            {new Date(job.scheduledAt).toLocaleString("en-LK", {
-              dateStyle: "full",
-              timeStyle: "short",
-            })}
-          </p>
-
-          <div className="flex items-start justify-between gap-3">
-            <p className="flex items-start gap-3">
-              <LuMapPin className="mt-1 text-muted" />
-              {job.address}
-            </p>
-
-            <a
-              href={mapUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 rounded-lg border border-line px-3 py-1 text-sm text-primary hover:bg-elevated"
-            >
-              Open map
-            </a>
-          </div>
-        </section>
-
-        {/* Work progress */}
-        <section className="mt-6 rounded-2xl border border-line bg-surface p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Work Progress</h2>
-
-            <span className="font-semibold text-primary">{progress}%</span>
-          </div>
-
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </section>
-
-        {/* Work instructions (read-only) */}
-        <section className="mt-6 rounded-2xl border border-line bg-surface p-4">
-          <h2 className="font-semibold">Work Instructions</h2>
-
-          <p className="mt-1 text-xs text-muted">Sent by admin. Read only.</p>
-
-          {(job.requestedTasks || []).length === 0 &&
-            !job.additionalRequirements && (
-              <p className="mt-4 text-sm text-muted">
-                No instructions were provided for this job.
-              </p>
-            )}
-
-          <div className="mt-4 space-y-2">
-            {(job.requestedTasks || []).map((task, index) => (
-              <p
-                key={index}
-                className="rounded-xl border border-line bg-elevated/40 p-3 text-sm text-ink"
-              >
-                {task}
-              </p>
-            ))}
-          </div>
-
-          {job.additionalRequirements && (
-            <p className="mt-4 whitespace-pre-wrap rounded-xl border border-line bg-elevated/40 p-3 text-sm text-muted">
-              {job.additionalRequirements}
-            </p>
-          )}
-        </section>
-
-        {/* Accept / Decline (only while Assigned and not answered) */}
-        {workStatus === "Assigned" && !response && (
-          <section className="mt-6 rounded-2xl border border-line bg-surface p-4">
-            <h2 className="font-semibold">New job assigned to you</h2>
-
-            <p className="mt-1 text-xs text-muted">
-              Accept this job to start work, or decline it.
-            </p>
-
-            {!showDeclineBox && (
-              <div className="mt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleRespond("Accepted")}
-                  disabled={acting}
-                  className="flex-1 rounded-xl bg-teal py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {acting ? "Saving..." : "Accept"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDeclineBox(true);
-                    setActionError("");
-                  }}
-                  disabled={acting}
-                  className="flex-1 rounded-xl border border-line py-3 font-semibold text-ink transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Decline
-                </button>
-              </div>
-            )}
-
-            {showDeclineBox && (
-              <div className="mt-4">
-                <p className="text-sm text-muted">
-                  Tell admin why (optional). Admin will be informed.
+        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* Info + steps (right column on desktop, first on mobile) */}
+          <aside className="min-w-0 space-y-5 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6">
+            <Card title="Job details">
+              <div className="space-y-4 text-sm">
+                <p className="flex items-center gap-3">
+                  <LuUserRound className="shrink-0 text-muted" size={18} />
+                  <span className="min-w-0 break-words">{job.customerName}</span>
                 </p>
 
-                <textarea
-                  value={declineReason}
-                  onChange={(event) => setDeclineReason(event.target.value)}
-                  maxLength={500}
-                  rows={3}
-                  placeholder="Example: Another job is taking longer than planned."
-                  className="mt-2 w-full resize-none rounded-xl border border-line bg-elevated/40 p-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none"
-                />
-
-                <div className="mt-1 text-right text-xs text-muted">
-                  {declineReason.length}/500
-                </div>
-
-                <div className="mt-3 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleRespond("Declined")}
-                    disabled={acting}
-                    className="flex-1 rounded-xl bg-amber-500 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                {job.customerPhone && (
+                  <a
+                    href={`tel:${job.customerPhone}`}
+                    className="flex items-center gap-3 text-primary"
                   >
-                    {acting ? "Saving..." : "Confirm Decline"}
-                  </button>
+                    <LuPhone className="shrink-0 text-muted" size={18} />
+                    {job.customerPhone}
+                  </a>
+                )}
 
-                  <button
-                    type="button"
-                    onClick={() => setShowDeclineBox(false)}
-                    disabled={acting}
-                    className="flex-1 rounded-xl border border-line py-3 font-semibold text-ink transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                <p className="flex items-start gap-3">
+                  <LuCalendarClock className="mt-0.5 shrink-0 text-muted" size={18} />
+                  <span className="min-w-0">{formatWhen(job.scheduledAt)}</span>
+                </p>
+
+                <div className="flex items-start justify-between gap-3">
+                  <p className="flex min-w-0 items-start gap-3">
+                    <LuMapPin className="mt-0.5 shrink-0 text-muted" size={18} />
+                    <span className="min-w-0 break-words">
+                      {job.address || "Address not provided"}
+                    </span>
+                  </p>
+
+                  {job.address && (
+                    <a
+                      href={mapUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-primary hover:bg-elevated"
+                    >
+                      Map
+                      <LuExternalLink size={13} />
+                    </a>
+                  )}
                 </div>
               </div>
-            )}
-          </section>
-        )}
+            </Card>
 
-        {/* Declined message */}
-        {workStatus === "Assigned" && response === "Declined" && (
-          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center text-sm text-amber-400">
-            You declined this job. Admin has been informed.
-          </div>
-        )}
+            <Card>
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading text-base font-bold">Work progress</h2>
+                <span className="font-mono text-sm font-semibold text-primary">
+                  {progress}%
+                </span>
+              </div>
 
-        {/* Photo loading error */}
-        {photoLoadError && (
-          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-            Unable to load job photos. Please refresh and try again.
-          </p>
-        )}
+              <div
+                className="mt-3 h-1.5 overflow-hidden rounded-full bg-elevated"
+                role="progressbar"
+                aria-label="Work progress"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
 
-        {/* Photo status messages */}
-        {(beforeUploaded || inProgressUploaded || afterUploaded) && (
-          <div className="mt-4 space-y-1 text-sm text-teal">
-            {beforeUploaded && <p>Before photo uploaded</p>}
-            {inProgressUploaded && (
-              <p>In Progress photo uploaded — 50% complete</p>
-            )}
-            {afterUploaded && <p>After photo uploaded — 100% complete</p>}
-          </div>
-        )}
+              <ol className="mt-5 space-y-3">
+                {steps.map((step, index) => {
+                  const isCurrent = index === currentStep;
 
-        {/* Before photo upload (only after Accept) */}
-        {workStatus === "Assigned" &&
-          response === "Accepted" &&
-          !beforeUploaded &&
-          !photoLoadError && (
-            <div className="mt-6">
-              <PhotoUploader
-                bookingId={bookingId}
-                stage="Before"
-                onUploaded={handlePhotoUploaded}
-              />
-
-              <p className="mt-2 text-xs text-muted">
-                Upload a Before photo to start work.
-              </p>
-            </div>
-          )}
-
-        {/* In Progress photo upload */}
-        {workStatus === "In Progress" && !inProgressUploaded && (
-          <div className="mt-6">
-            <PhotoUploader
-              bookingId={bookingId}
-              stage="In Progress"
-              onUploaded={handlePhotoUploaded}
-            />
-
-            <p className="mt-2 text-xs text-muted">
-              Upload a progress photo after completing approximately half of the
-              work.
-            </p>
-          </div>
-        )}
-
-        {/* After photo upload */}
-        {workStatus === "In Progress" &&
-          inProgressUploaded &&
-          !afterUploaded && (
-            <div className="mt-6">
-              <PhotoUploader
-                bookingId={bookingId}
-                stage="After"
-                onUploaded={handlePhotoUploaded}
-              />
-
-              <p className="mt-2 text-xs text-muted">
-                Upload an After photo when the work is fully finished.
-              </p>
-            </div>
-          )}
-
-        {/* Start Work (only after Accept) */}
-        {workStatus === "Assigned" && response === "Accepted" && (
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={!beforeUploaded || photoLoadError || acting}
-            className="mt-6 w-full rounded-xl bg-primary py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {acting ? "Starting..." : "Start Work"}
-          </button>
-        )}
-
-        {/* Completion Gate status */}
-        {workStatus === "In Progress" && (
-          <section className="mt-4 rounded-2xl border border-line bg-surface p-4">
-            <h2 className="font-semibold">Completion Requirements</h2>
-
-            {gateError && (
-              <p className="mt-3 text-sm text-red-400">
-                Unable to verify completion requirements. Please refresh and try
-                again.
-              </p>
-            )}
-
-            {!gateError && gateLoading && (
-              <p className="mt-3 text-sm text-muted">
-                Checking completion requirements...
-              </p>
-            )}
-
-            {!gateError && !gateLoading && completionGate && (
-              <>
-                {completionGate.allowed ? (
-                  <p className="mt-3 text-sm text-teal">
-                    All completion requirements are satisfied.
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-sm text-muted">
-                      Complete the following requirements:
-                    </p>
-
-                    {(completionGate.missing || []).map((item, index) => (
-                      <p
-                        key={index}
-                        className="flex items-start gap-2 text-sm text-amber-400"
+                  return (
+                    <li key={step.label} className="flex items-center gap-3 text-sm">
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${
+                          step.done
+                            ? "border-teal bg-teal text-white"
+                            : isCurrent
+                              ? "border-primary text-primary"
+                              : "border-line text-muted"
+                        }`}
                       >
-                        <LuCircle className="mt-1 shrink-0" />
-                        {item}
-                      </p>
-                    ))}
+                        {step.done ? <LuCheck size={13} /> : index + 1}
+                      </span>
+
+                      <span
+                        className={
+                          step.done
+                            ? "text-ink"
+                            : isCurrent
+                              ? "font-semibold text-ink"
+                              : "text-muted"
+                        }
+                      >
+                        {step.label}
+                      </span>
+
+                      {isCurrent && (
+                        <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                          Next
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </Card>
+          </aside>
+
+          {/* Work area */}
+          <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1">
+            {/* Work instructions (read-only) */}
+            <Card title="Work instructions" subtitle="Sent by admin. Read only.">
+              {(job.requestedTasks || []).length === 0 &&
+                !job.additionalRequirements && (
+                  <p className="text-sm text-muted">
+                    No instructions were provided for this job.
+                  </p>
+                )}
+
+              <div className="space-y-2">
+                {(job.requestedTasks || []).map((task, index) => (
+                  <p
+                    key={index}
+                    className="rounded-xl border border-line bg-elevated/40 p-3 text-sm text-ink"
+                  >
+                    {task}
+                  </p>
+                ))}
+              </div>
+
+              {job.additionalRequirements && (
+                <p className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-elevated/40 p-3 text-sm text-muted">
+                  {job.additionalRequirements}
+                </p>
+              )}
+            </Card>
+
+            {/* Accept / Decline (only while Assigned and not answered) */}
+            {workStatus === "Assigned" && !response && (
+              <Card
+                title="New job assigned to you"
+                subtitle="Accept this job to start work, or decline it."
+                className="border-primary/40"
+              >
+                {!showDeclineBox && (
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleRespond("Accepted")}
+                      disabled={acting}
+                      className="flex-1 rounded-xl bg-teal py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {acting ? "Saving..." : "Accept"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDeclineBox(true);
+                        setActionError("");
+                      }}
+                      disabled={acting}
+                      className="flex-1 rounded-xl border border-line py-3 font-semibold text-ink transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
                   </div>
                 )}
-              </>
+
+                {showDeclineBox && (
+                  <div>
+                    <p className="text-sm text-muted">
+                      Tell admin why (optional). Admin will be informed.
+                    </p>
+
+                    <textarea
+                      value={declineReason}
+                      onChange={(event) => setDeclineReason(event.target.value)}
+                      maxLength={500}
+                      rows={3}
+                      placeholder="Example: Another job is taking longer than planned."
+                      className="mt-2 w-full resize-none rounded-xl border border-line bg-elevated/40 p-3 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none"
+                    />
+
+                    <div className="mt-1 text-right text-xs text-muted">
+                      {declineReason.length}/500
+                    </div>
+
+                    <div className="mt-3 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleRespond("Declined")}
+                        disabled={acting}
+                        className="flex-1 rounded-xl bg-amber-500 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {acting ? "Saving..." : "Confirm Decline"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowDeclineBox(false)}
+                        disabled={acting}
+                        className="flex-1 rounded-xl border border-line py-3 font-semibold text-ink transition hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Card>
             )}
-          </section>
-        )}
 
-        {/* Complete Work */}
-        {workStatus === "In Progress" && (
-          <button
-            type="button"
-            onClick={handleComplete}
-            disabled={!canComplete}
-            className="mt-6 w-full rounded-xl bg-teal py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {acting ? "Completing..." : "Complete Work"}
-          </button>
-        )}
+            {/* Declined message */}
+            {workStatus === "Assigned" && response === "Declined" && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-center text-sm text-amber-400">
+                You declined this job. Admin has been informed.
+              </div>
+            )}
 
-        {/* Error from the server */}
-        {actionError && (
-          <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-sm text-red-400">
-            {actionError}
-          </p>
-        )}
+            {/* Photo loading error */}
+            {photoLoadError && (
+              <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                Unable to load job photos. Please refresh and try again.
+              </p>
+            )}
 
-        {/* Work completed message */}
-        {workStatus === "Completed" && (
-          <div className="mt-6 rounded-xl border border-teal/30 bg-teal/10 p-4 text-center text-teal">
-            Work Completed Successfully
+            {/* Before photo upload (only after Accept) */}
+            {workStatus === "Assigned" &&
+              response === "Accepted" &&
+              !beforeUploaded &&
+              !photoLoadError && (
+                <Card title="Before photo" subtitle="Upload a Before photo to start work.">
+                  <PhotoUploader
+                    bookingId={bookingId}
+                    stage="Before"
+                    onUploaded={handlePhotoUploaded}
+                  />
+                </Card>
+              )}
+
+            {/* In Progress photo upload */}
+            {workStatus === "In Progress" && !inProgressUploaded && (
+              <Card
+                title="Progress photo"
+                subtitle="Upload a progress photo after completing approximately half of the work."
+              >
+                <PhotoUploader
+                  bookingId={bookingId}
+                  stage="In Progress"
+                  onUploaded={handlePhotoUploaded}
+                />
+              </Card>
+            )}
+
+            {/* After photo upload */}
+            {workStatus === "In Progress" &&
+              inProgressUploaded &&
+              !afterUploaded && (
+                <Card
+                  title="After photo"
+                  subtitle="Upload an After photo when the work is fully finished."
+                >
+                  <PhotoUploader
+                    bookingId={bookingId}
+                    stage="After"
+                    onUploaded={handlePhotoUploaded}
+                  />
+                </Card>
+              )}
+
+            {/* Start Work (only after Accept) */}
+            {workStatus === "Assigned" && response === "Accepted" && (
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={!beforeUploaded || photoLoadError || acting}
+                className="w-full rounded-xl bg-primary py-3.5 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {acting ? "Starting..." : "Start Work"}
+              </button>
+            )}
+
+            {/* Completion Gate status */}
+            {workStatus === "In Progress" && (
+              <Card title="Completion requirements">
+                {gateError && (
+                  <p className="text-sm text-red-400">
+                    Unable to verify completion requirements. Please refresh and try
+                    again.
+                  </p>
+                )}
+
+                {!gateError && gateLoading && (
+                  <p className="text-sm text-muted">
+                    Checking completion requirements...
+                  </p>
+                )}
+
+                {!gateError && !gateLoading && completionGate && (
+                  <>
+                    {completionGate.allowed ? (
+                      <p className="text-sm text-teal">
+                        All completion requirements are satisfied.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted">
+                          Complete the following requirements:
+                        </p>
+
+                        {(completionGate.missing || []).map((item, index) => (
+                          <p
+                            key={index}
+                            className="flex items-start gap-2 text-sm text-amber-400"
+                          >
+                            <LuCircle className="mt-1 shrink-0" />
+                            {item}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card>
+            )}
+
+            {/* Complete Work */}
+            {workStatus === "In Progress" && (
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={!canComplete}
+                className="w-full rounded-xl bg-teal py-3.5 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {acting ? "Completing..." : "Complete Work"}
+              </button>
+            )}
+
+            {/* Error from the server */}
+            {actionError && (
+              <p
+                role="alert"
+                className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-sm text-red-400"
+              >
+                {actionError}
+              </p>
+            )}
+
+            {/* Work completed message */}
+            {workStatus === "Completed" && (
+              <div className="rounded-2xl border border-teal/30 bg-teal/10 p-4 text-center font-semibold text-teal">
+                Work Completed Successfully
+              </div>
+            )}
+
+            {/* Notes and incident logs */}
+            <NotesPanel bookingId={bookingId} onSaved={loadCompletionGate} />
           </div>
-        )}
-
-        {/* Notes and incident logs */}
-        <NotesPanel bookingId={bookingId} onSaved={loadCompletionGate} />
+        </div>
       </div>
     </main>
   );

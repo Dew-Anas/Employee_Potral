@@ -287,18 +287,9 @@ function Dashboard() {
           {/* Assignment overview */}
           <section className="min-w-0 rounded-2xl border border-line bg-surface p-5 sm:p-7">
             <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-heading text-lg font-bold text-ink">Assignment overview</h2>
-                <p className="mt-1 text-xs text-muted">Your current service workload</p>
-              </div>
+              
 
-              <Link
-                to="/assignments"
-                className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80"
-              >
-                View all
-                <LuArrowRight size={15} />
-              </Link>
+             
             </div>
 
             {loading ? (

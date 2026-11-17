@@ -1,7 +1,8 @@
 // server/src/controllers/assignmentController.js
 // WHY: Employee accepts or declines a job that admin assigned.
 // ROUTE: PUT /api/employee/jobs/:id/respond   body: { response: "Accepted" | "Declined", reason? }
-// RULES: job is mine + status Assigned + not answered before. Decline reason is optional (user decision).
+// RULES: job is mine + status Assigned (any style: "assigned" / "Assigned") + not answered before.
+//        Decline reason is optional (user decision).
 // TODO(audit): add logAudit once lead confirms the audit module name for assignments.
 // TODO(confirm): Declined job stays Assigned in Booking; admin must reassign it (admin side, Dev 2).
 
@@ -9,6 +10,7 @@ const mongoose = require("mongoose");
 
 const Booking = require("../models/Booking");
 const AssignmentResponse = require("../models/AssignmentResponse");
+const { canonicalStatus } = require("../utils/bookingStatus");
 
 const respondToJob = async (req, res) => {
   try {
@@ -42,7 +44,7 @@ const respondToJob = async (req, res) => {
       return res.status(404).json({ success: false, message: "Job not found" });
     }
 
-    if (booking.status !== "Assigned") {
+    if (canonicalStatus(booking.status) !== "Assigned") {
       return res.status(400).json({
         success: false,
         message: "Only an assigned job can be answered",

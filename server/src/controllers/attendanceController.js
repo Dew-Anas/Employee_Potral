@@ -2,12 +2,14 @@
 // WHY: Attendance for the logged-in employee: Clock In, Clock Out, today's sessions, and date-range history.
 // ROUTES: POST /clock-in, POST /clock-out, GET /today, GET /history (routes/attendanceRoutes.js; protect + employeeOnly)
 // MODELS: Attendance (many sessions per day, one open session), Booking (to block Clock Out during a job)
-// RULES: Clock Out is blocked while a job is In Progress (lead, 5 Nov).
+// RULES: Clock Out is blocked while a job is In Progress (lead, 5 Nov). "In Progress" is matched in
+//        any style ("in_progress" / "In Progress") via utils/bookingStatus.js.
 // HANDOFF: GET /history is the employee's own report. Admin / reports read the same attendances data.
 // TODO(confirm): admin report endpoint waits for the admin role value (Dev_B enum says "admin", our users say "EMPLOYEE").
 
 const Attendance = require("../models/Attendance");
 const Booking = require("../models/Booking");
+const { statusIn } = require("../utils/bookingStatus");
 
 // Convert a Date to Sri Lanka local date (YYYY-MM-DD)
 const toLocalDate = (date) =>
@@ -91,7 +93,7 @@ const clockOut = async (req, res) => {
     // Rule: no Clock Out while a job is In Progress.
     const activeJob = await Booking.findOne({
       employee: req.user._id,
-      status: "In Progress",
+      status: { $in: statusIn("In Progress") },
     }).select("_id");
 
     if (activeJob) {

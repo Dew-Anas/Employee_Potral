@@ -1,8 +1,12 @@
 // server/src/models/Booking.js
-// TEMP-DB: Read-only copy of Dev_B's server/models/Booking.js so the employee portal can query bookings.
-// REAL: Delete this file when Dev_B's model is merged (two "Booking" models cause OverwriteModelError).
-// TODO(confirm): Dev_B Booking model is assumed to be final; lead to confirm (Dev_A has a different schema).
-// Used by: employee jobs API (to be written).
+// TEMP-DB: Read copy of the shared `bookings` collection for the employee portal.
+//          It merges Dev_B's fields (scheduledStart, employee, tasks...) with the fields
+//          Dev_A's customer flow really saves (customer, service, address, preferredDate...).
+// REAL: Delete this file when the final Booking model is merged
+//       (two "Booking" models cause OverwriteModelError).
+// TODO(confirm): lead to confirm the final Booking model and status values.
+// NOTE: status has NO enum here on purpose (values differ between devs, see utils/bookingStatus.js).
+// Used by: employeeJobController, jobStatusController, attendance and completion checks.
 
 const mongoose = require("mongoose");
 
@@ -36,30 +40,32 @@ const bookingPhotoSchema = new mongoose.Schema(
 const bookingSchema = new mongoose.Schema(
   {
     bookingId: { type: String, required: true, unique: true },
-    quotation: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Quotation",
-      required: true,
-    },
-    scheduledStart: { type: Date, required: true },
-    scheduledEnd: { type: Date, required: true },
+    quotation: { type: mongoose.Schema.Types.ObjectId, ref: "Quotation" },
+
+    // Fields saved by the customer flow (Dev_A)
+    customer: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    service: { type: mongoose.Schema.Types.ObjectId, ref: "Service" },
+    address: { type: String, default: "" },
+    preferredDate: { type: Date },
+    preferredTime: { type: String },
+    confirmedAt: { type: Date },
+    completedAt: { type: Date },
+    cancelledAt: { type: Date },
+    cancellationReason: { type: String, default: "" },
+    serviceStartedAt: { type: Date },
+    serviceCompletedAt: { type: Date },
+    customerSignedOff: { type: Boolean, default: false },
+    customerSignedOffAt: { type: Date },
+
+    // Fields used by the admin scheduling / assign flow (Dev_B)
+    scheduledStart: { type: Date },
+    scheduledEnd: { type: Date },
     employee: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
-    status: {
-      type: String,
-      enum: [
-        "Pending",
-        "Confirmed",
-        "Assigned",
-        "In Progress",
-        "Completed",
-        "Cancelled",
-      ],
-      default: "Pending",
-    },
+    status: { type: String, default: "Pending" },
     tasks: [bookingTaskSchema],
     photos: [bookingPhotoSchema],
     signoff: {
@@ -72,4 +78,4 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Booking", bookingSchema);
+module.exports = mongoose.models.Booking || mongoose.model("Booking", bookingSchema);

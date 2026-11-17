@@ -1,4 +1,3 @@
-
 /*
 WHY: Start and Complete a job = change Booking.status
 (Assigned -> In Progress -> Completed).
@@ -20,13 +19,12 @@ COMPLETE RULES:
 - Job status is In Progress
 - Completion Gate passes (3 photos + a note)
 
-TODO(confirm):
-Dev_B Booking has no startedAt/completedAt.
-Times are recorded in auditlogs (logAudit) for now.
-
-TODO(booking):
-Ask Dev B to add startedAt/completedAt to Booking
-(work-time calculation needs them).
+STATUS STYLE: status is READ in any style ("assigned", "Assigned", "in_progress"...)
+and WRITTEN in the same style as the booking already has (utils/bookingStatus.js writeStatus),
+because the customer screens only understand "in_progress" / "completed" (Dev_A).
+TIMES: Start sets serviceStartedAt. Complete sets serviceCompletedAt and completedAt
+(fields of the shared bookings collection). Also recorded in auditlogs (logAudit).
+TODO(confirm): lead to confirm the final status values and these time fields.
 
 TODO(confirm):
 In Progress photo = 50% (lead).
@@ -42,6 +40,7 @@ const JobPhoto = require("../models/JobPhoto");
 const logAudit = require("../utils/logAudit");
 const AssignmentResponse = require("../models/AssignmentResponse");
 const { checkCompletion } = require("./completionController");
+const { canonicalStatus, statusIn, writeStatus } = require("../utils/bookingStatus");
 
 // PUT /api/employee/jobs/:id/start
 const startJob = async (req, res) => {
@@ -69,7 +68,7 @@ const startJob = async (req, res) => {
       });
     }
 
-    if (booking.status !== "Assigned") {
+    if (canonicalStatus(booking.status) !== "Assigned") {
       return res.status(400).json({
         success: false,
         message: "Only an assigned job can be started",
@@ -106,7 +105,7 @@ const startJob = async (req, res) => {
     // Rule: only one In Progress job at a time.
     const activeJob = await Booking.findOne({
       employee: employeeId,
-      status: "In Progress",
+      status: { $in: statusIn("In Progress") },
     });
 
     if (activeJob) {
@@ -135,10 +134,11 @@ const startJob = async (req, res) => {
       {
         _id: booking._id,
         employee: employeeId,
-        status: "Assigned",
+        status: { $in: statusIn("Assigned") },
       },
       {
-        status: "In Progress",
+        status: writeStatus("In Progress", booking.status),
+        serviceStartedAt: new Date(),
       },
       {
         new: true,
@@ -164,7 +164,7 @@ const startJob = async (req, res) => {
     return res.json({
       success: true,
       message: "Work started",
-      status: updated.status,
+      status: canonicalStatus(updated.status),
     });
   } catch (error) {
     console.error("startJob error:", error.message);
@@ -201,7 +201,7 @@ const completeJob = async (req, res) => {
       });
     }
 
-    if (booking.status !== "In Progress") {
+    if (canonicalStatus(booking.status) !== "In Progress") {
       return res.status(400).json({
         success: false,
         message: "Only a job in progress can be completed",
@@ -209,10 +209,7 @@ const completeJob = async (req, res) => {
     }
 
     // Completion Gate: the backend decides, never the UI.
-    const missing = await checkCompletion(
-      booking._id,
-      employeeId
-    );
+    const missing = await checkCompletion(booking._id, employeeId);
 
     if (missing.length > 0) {
       return res.status(400).json({
@@ -222,14 +219,18 @@ const completeJob = async (req, res) => {
       });
     }
 
+    const now = new Date();
+
     const updated = await Booking.findOneAndUpdate(
       {
         _id: booking._id,
         employee: employeeId,
-        status: "In Progress",
+        status: { $in: statusIn("In Progress") },
       },
       {
-        status: "Completed",
+        status: writeStatus("Completed", booking.status),
+        serviceCompletedAt: now,
+        completedAt: now,
       },
       {
         new: true,
@@ -255,7 +256,7 @@ const completeJob = async (req, res) => {
     return res.json({
       success: true,
       message: "Work completed",
-      status: updated.status,
+      status: canonicalStatus(updated.status),
     });
   } catch (error) {
     console.error("completeJob error:", error.message);
