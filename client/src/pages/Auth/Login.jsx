@@ -6,6 +6,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import AuthShell from "../../components/auth/AuthShell";
 import { TextField, PasswordField } from "../../components/auth/AuthFields";
+import { isValidEmail, normalizeEmail } from "../../utils/validators";
 
 function Login() {
   const { user, login } = useAuth();
@@ -27,10 +28,15 @@ function Login() {
       return;
     }
 
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address, e.g. name@example.com");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      await login(email.trim(), password);
+      await login(normalizeEmail(email), password);
       navigate("/", { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || "Cannot reach the server. Please try again.");

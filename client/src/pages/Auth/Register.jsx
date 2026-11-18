@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { LuCheck } from "react-icons/lu";
 import api from "../../services/api";
+import { isValidEmail } from "../../utils/validators";
 import AuthShell from "../../components/auth/AuthShell";
 import {
   TextField,
@@ -14,11 +15,10 @@ import {
   FileField,
 } from "../../components/auth/AuthFields";
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phoneRegex = /^\+?\d{9,15}$/;
 const nicRegex = /^(\d{9}[VvXx]|\d{12})$/;
 
-const MAX_FILE_SIZE = 1 * 1024 * 1024;
+const MAX_FILE_SIZE = 3 * 1024 * 1024;
 
 const emptyForm = {
   firstName: "",
@@ -94,7 +94,9 @@ function Register() {
     if (!firstName || !lastName || !address) {
       return fail("First name, last name and address are required.");
     }
-    if (!emailRegex.test(email)) return fail("Please enter a valid email address.");
+    if (!isValidEmail(email)) {
+      return fail("Please enter a valid email address, e.g. name@example.com");
+    }
     if (!phoneRegex.test(phone)) return fail("Please enter a valid phone number (9-15 digits).");
     if (!nicRegex.test(nicNumber)) return fail("Please enter a valid NIC number.");
     if (!form.skillCategory) return fail("Please select your skill.");
@@ -256,7 +258,7 @@ function Register() {
         <div className="grid gap-5 sm:grid-cols-2">
           <FileField
             label="NIC front"
-            hint="JPG or PNG, up to 1MB"
+            hint="JPG or PNG, up to 3MB"
             accept="image/jpeg,image/png"
             maxSize={MAX_FILE_SIZE}
             file={images.nicFrontImage}
@@ -265,7 +267,7 @@ function Register() {
           />
           <FileField
             label="NIC back"
-            hint="JPG or PNG, up to 1MB"
+            hint="JPG or PNG, up to 3MB"
             accept="image/jpeg,image/png"
             maxSize={MAX_FILE_SIZE}
             file={images.nicBackImage}
@@ -275,7 +277,7 @@ function Register() {
           <div className="sm:col-span-2">
             <FileField
               label="Profile photo"
-              hint="A clear photo of your face, JPG or PNG, up to 1MB"
+              hint="A clear photo of your face, JPG or PNG, up to 3MB"
               accept="image/jpeg,image/png"
               maxSize={MAX_FILE_SIZE}
               file={images.profilePhoto}

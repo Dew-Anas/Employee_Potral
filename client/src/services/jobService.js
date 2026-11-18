@@ -11,7 +11,8 @@
 
 import api from "./api";
 
-export const USING_DEMO_DATA = false;
+export const USING_DEMO_DATA = false
+;
 
 // ---------- Demo data (TEMP-DB) ----------
 

@@ -24,7 +24,7 @@ import { useAuth } from "../../context/AuthContext";
 import api from "../../services/api";
 
 const phoneRegex = /^\+?\d{9,15}$/;
-const MAX_PHOTO_SIZE = 2 * 1024 * 1024;
+const MAX_PHOTO_SIZE = 3 * 1024 * 1024;
 
 const fieldClass =
   "mt-1.5 w-full rounded-xl border border-line bg-elevated px-3.5 py-3 text-sm text-ink outline-none transition placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/15";

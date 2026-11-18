@@ -7,6 +7,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const EmployeeProfile = require("../models/EmployeeProfile");
+const { isValidEmail } = require("../utils/validators");
 
 const isEmployeeRole = (role) => String(role || "").toLowerCase() === "employee";
 const phoneRegex = /^\+?\d{9,15}$/;
@@ -56,6 +57,13 @@ const login = async (req, res) => {
 
     if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
       return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid email address, e.g. name@example.com",
+      });
     }
 
     const user = await User.findOne({ email: email.trim().toLowerCase() });

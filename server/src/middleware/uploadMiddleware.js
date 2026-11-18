@@ -1,11 +1,12 @@
-
 const multer = require("multer");
 
 // Shared image storage and validation
 const imageStorage = multer.memoryStorage();
 
+const MAX_IMAGE_MB = 3;
+
 const imageLimits = {
-  fileSize: 2 * 1024 * 1024, // 2MB
+  fileSize: MAX_IMAGE_MB * 1024 * 1024,
 };
 
 const imageFileFilter = (req, file, cb) => {
@@ -27,7 +28,7 @@ const registrationUpload = multer({
   { name: "profilePhoto", maxCount: 1 },
 ]);
 
-// Job photo upload
+// Job photo upload (also used for the profile photo)
 const jobPhotoUpload = multer({
   storage: imageStorage,
   limits: imageLimits,
@@ -42,7 +43,7 @@ const handleUpload = (uploadMiddleware) => {
 
       const message =
         err.code === "LIMIT_FILE_SIZE"
-          ? "Image must be 2MB or smaller"
+          ? `Image must be ${MAX_IMAGE_MB}MB or smaller`
           : err.message;
 
       return res.status(400).json({

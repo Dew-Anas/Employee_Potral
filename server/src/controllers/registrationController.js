@@ -9,8 +9,8 @@ const bcrypt = require("bcryptjs");
 const EmployeeProfile = require("../models/EmployeeProfile");
 const Category = require("../models/Category");
 const User = require("../models/User");
+const { isValidEmail } = require("../utils/validators");
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const nicRegex = /^(\d{9}[VvXx]|\d{12})$/;
 const phoneRegex = /^\+?\d{9,15}$/;
 
@@ -45,8 +45,11 @@ const submitRegistration = async (req, res) => {
     }
 
     // 2. Email
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: "A valid email is required" });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid email address, e.g. name@example.com",
+      });
     }
 
     // 3. Phone
