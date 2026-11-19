@@ -4,7 +4,7 @@
 // DATA: customer / service / address are read straight from the booking (customer flow);
 //       if missing, from the chain Booking -> quotation -> ServiceRequest.
 // TIME: scheduledStart (admin) or, if not scheduled yet, preferredDate + preferredTime (customer).
-// EXTRA: each job carries `response` ("Accepted" | "Declined" | null) from assignmentresponses.
+// EXTRA: each job carries `response` ("Accepted" | "Declined" | null) and `respondedAt` from assignmentresponses.
 // TODO(confirm): final Booking model + status values (lead). Status is normalised for the UI.
 // TODO(confirm): preferredTime is combined with preferredDate in the SERVER's local time zone.
 // TODO(confirm): requestedTasks = Booking.tasks titles; additionalRequirements = ServiceRequest.description + Booking.notes.
@@ -64,7 +64,8 @@ const toScheduledAt = (booking) => {
 };
 
 // Convert a populated booking into the shape the React UI expects.
-const toJobDTO = (booking, response) => {
+// `answer` = the assignmentresponses document for this job (or undefined).
+const toJobDTO = (booking, answer) => {
   const request = booking.quotation?.request;
   const customer = booking.customer?.firstName ? booking.customer : request?.customer;
   const service = booking.service?.name ? booking.service : request?.service;
@@ -88,7 +89,8 @@ const toJobDTO = (booking, response) => {
     scheduledAt: toScheduledAt(booking),
     scheduledEnd: booking.scheduledEnd || null,
     status: canonicalStatus(booking.status),
-    response: response || null,
+    response: answer?.response || null,
+    respondedAt: answer?.respondedAt || null,
     requestedTasks: (booking.tasks || []).map((task) => task.title),
     additionalRequirements,
   };
@@ -111,7 +113,7 @@ const getMyJobs = async (req, res) => {
     }).lean();
 
     const responseByBooking = new Map(
-      responses.map((item) => [item.booking.toString(), item.response])
+      responses.map((item) => [item.booking.toString(), item])
     );
 
     const jobs = bookings
@@ -168,7 +170,7 @@ const getMyJobById = async (req, res) => {
 
     return res.json({
       success: true,
-      job: toJobDTO(booking, answer?.response),
+      job: toJobDTO(booking, answer),
     });
   } catch (error) {
     console.error("getMyJobById error:", error.message);

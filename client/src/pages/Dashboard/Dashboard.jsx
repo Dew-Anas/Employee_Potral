@@ -21,6 +21,7 @@ import AttendanceStatus from "../../components/common/AttendanceStatus";
 import UserAvatar from "../../components/common/UserAvatar";
 
 import { getMyJobs } from "../../services/jobService";
+import { isNewAssignment, getCountableJobs } from "../../utils/jobStats";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
 
@@ -47,10 +48,6 @@ const writeSeen = (ids) => {
 };
 
 const jobId = (job) => String(job.id ?? job._id ?? job.bookingId ?? "");
-
-// A "new assignment" = Assigned by admin and the employee has not answered yet.
-const isNewAssignment = (job) =>
-  (job.status === "Assigned" || job.status === "Pending") && !job.response;
 
 const formatWhen = (value) => {
   if (!value) return "Schedule to be confirmed";
@@ -315,7 +312,7 @@ function Dashboard() {
                 </button>
               </div>
             ) : (
-              <JobSummary jobs={jobs} />
+              <JobSummary jobs={getCountableJobs(jobs)} />
             )}
           </section>
 

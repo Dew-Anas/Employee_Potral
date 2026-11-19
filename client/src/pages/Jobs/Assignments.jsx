@@ -3,6 +3,7 @@
 // DATA: getMyJobs() from services/jobService.js (demo or real API).
 // UI: 4 equal stat tabs (fit a 320px phone), cards with a status accent, skeleton loading,
 //     retry on error. A job admin assigned that the employee has not answered is highlighted as "New".
+//     Declined jobs stay in "All" for DECLINED_VISIBLE_DAYS (utils/jobStats.js) and never count as Pending.
 
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -15,6 +16,14 @@ import {
 } from "react-icons/lu";
 
 import { getMyJobs, USING_DEMO_DATA } from "../../services/jobService";
+import {
+  groupOf,
+  isNewAssignment as isNew,
+  isDeclined,
+  getListJobs,
+  getCounts,
+  DECLINED_VISIBLE_DAYS,
+} from "../../utils/jobStats";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -22,15 +31,6 @@ const TABS = [
   { key: "inProgress", label: "In Progress" },
   { key: "completed", label: "Completed" },
 ];
-
-// Portal "Pending" = Booking "Assigned".
-const groupOf = (job) => {
-  if (job.status === "In Progress") return "inProgress";
-  if (job.status === "Completed") return "completed";
-  return "pending";
-};
-
-const isNew = (job) => groupOf(job) === "pending" && !job.response;
 
 // Badge text + colours + left accent colour for each card.
 function getStyle(job) {
@@ -98,15 +98,13 @@ function Assignments() {
     load();
   }, [load]);
 
-  const counts = {
-    all: jobs.length,
-    pending: jobs.filter((job) => groupOf(job) === "pending").length,
-    inProgress: jobs.filter((job) => groupOf(job) === "inProgress").length,
-    completed: jobs.filter((job) => groupOf(job) === "completed").length,
-  };
+  // Same rules as the Dashboard (utils/jobStats.js): declined jobs are listed in "All"
+  // for a while, but never counted as Pending.
+  const listJobs = getListJobs(jobs);
+  const counts = getCounts(listJobs);
 
-  const visibleJobs = tab === "all" ? jobs : jobs.filter((job) => groupOf(job) === tab);
-  const newCount = jobs.filter(isNew).length;
+  const visibleJobs = tab === "all" ? listJobs : listJobs.filter((job) => groupOf(job) === tab);
+  const newCount = listJobs.filter(isNew).length;
 
   return (
     <main className="min-h-screen bg-page px-4 pb-28 pt-5 text-ink sm:px-6 lg:px-10 lg:pb-10">
@@ -195,10 +193,10 @@ function Assignments() {
               <LuClipboardList size={22} />
             </div>
             <p className="mt-4 text-sm font-semibold text-ink">
-              {jobs.length === 0 ? "No assignments yet" : "Nothing in this list"}
+              {listJobs.length === 0 ? "No assignments yet" : "Nothing in this list"}
             </p>
             <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted">
-              {jobs.length === 0
+              {listJobs.length === 0
                 ? "When the admin assigns you a job, it will appear here."
                 : "Try another tab to see your other jobs."}
             </p>
@@ -218,7 +216,7 @@ function Assignments() {
                     to={`/assignments/${job.id}`}
                     className={`group relative block overflow-hidden rounded-2xl border bg-surface p-4 pl-5 transition hover:bg-elevated ${
                       fresh ? "border-primary/50" : "border-line"
-                    }`}
+                    } ${isDeclined(job) ? "opacity-75" : ""}`}
                   >
                     <span
                       className={`absolute inset-y-0 left-0 w-1 ${style.accent}`}
@@ -258,6 +256,12 @@ function Assignments() {
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
                           New · Tap to accept or decline
                           <LuChevronRight size={15} />
+                        </span>
+                      ) : isDeclined(job) ? (
+                        <span className="text-xs text-muted">
+                          {job.respondedAt
+                            ? `Declined ${formatWhen(job.respondedAt)}`
+                            : "Declined"}
                         </span>
                       ) : (
                         <LuChevronRight
