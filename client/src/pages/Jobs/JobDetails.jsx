@@ -5,6 +5,8 @@
 // DEMO SWITCH: USING_DEMO_DATA (services/jobService.js). Demo = local state only. Real = backend API.
 // APIs: jobService (job, respond, start, complete), photoService, completionService, noteService.
 // UI: step tracker, status badge, sticky info column on desktop. Logic is unchanged.
+// CONTACT: customer name / phone / address come from the job (server reads booking, else the service request).
+//          "Open in Maps" and "Call customer" unlock after the employee accepts (one switch: contactUnlocked).
 
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -16,7 +18,8 @@ import {
   LuUserRound,
   LuCircle,
   LuCheck,
-  LuExternalLink,
+  LuNavigation,
+  LuLock,
 } from "react-icons/lu";
 
 import {
@@ -69,6 +72,40 @@ function Card({ title, subtitle, children, className = "" }) {
       {subtitle && <p className="mt-1 text-xs text-muted">{subtitle}</p>}
       <div className={title ? "mt-4" : ""}>{children}</div>
     </section>
+  );
+}
+
+// A big, thumb-friendly link button. Real <a> when enabled, greyed <span> when not.
+// external = open in a new tab/window (maps). Phone links use tel:.
+function ActionButton({ href, icon: Icon, children, disabled = false, external = false, primary = false }) {
+  const base =
+    "flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition";
+
+  if (disabled || !href) {
+    return (
+      <span
+        aria-disabled="true"
+        className={`${base} cursor-not-allowed border border-line bg-elevated/40 text-muted opacity-60`}
+      >
+        <Icon size={17} />
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      className={`${base} ${
+        primary
+          ? "bg-primary text-white hover:bg-primary/90"
+          : "border border-line bg-elevated text-ink hover:bg-elevated/70"
+      }`}
+    >
+      <Icon size={17} />
+      {children}
+    </a>
   );
 }
 
@@ -350,6 +387,10 @@ function JobDetails() {
   const accepted = response === "Accepted" || workStatus !== "Assigned";
   const started = workStatus === "In Progress" || workStatus === "Completed";
 
+  // Contact tools (directions + call) unlock after Accept. Set to `true` to always show them.
+  const contactUnlocked = accepted;
+  const phoneHref = job.customerPhone ? `tel:${job.customerPhone.replace(/\s+/g, "")}` : "";
+
   const steps = [
     { label: "Accept job", done: accepted },
     { label: "Before photo", done: beforeUploaded },
@@ -395,48 +436,87 @@ function JobDetails() {
           {/* Info + steps (right column on desktop, first on mobile) */}
           <aside className="min-w-0 space-y-5 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6">
             <Card title="Job details">
-              <div className="space-y-4 text-sm">
-                <p className="flex items-center gap-3">
-                  <LuUserRound className="shrink-0 text-muted" size={18} />
-                  <span className="min-w-0 break-words">{job.customerName}</span>
-                </p>
-
-                {job.customerPhone && (
-                  <a
-                    href={`tel:${job.customerPhone}`}
-                    className="flex items-center gap-3 text-primary"
-                  >
-                    <LuPhone className="shrink-0 text-muted" size={18} />
-                    {job.customerPhone}
-                  </a>
-                )}
-
-                <p className="flex items-start gap-3">
-                  <LuCalendarClock className="mt-0.5 shrink-0 text-muted" size={18} />
-                  <span className="min-w-0">{formatWhen(job.scheduledAt)}</span>
-                </p>
-
-                <div className="flex items-start justify-between gap-3">
-                  <p className="flex min-w-0 items-start gap-3">
-                    <LuMapPin className="mt-0.5 shrink-0 text-muted" size={18} />
-                    <span className="min-w-0 break-words">
-                      {job.address || "Address not provided"}
-                    </span>
-                  </p>
-
-                  {job.address && (
-                    <a
-                      href={mapUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-primary hover:bg-elevated"
-                    >
-                      Map
-                      <LuExternalLink size={13} />
-                    </a>
-                  )}
+              <dl className="space-y-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <LuUserRound className="mt-0.5 shrink-0 text-muted" size={18} />
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted">Customer</dt>
+                    <dd className="break-words font-medium text-ink">{job.customerName}</dd>
+                  </div>
                 </div>
+
+                <div className="flex items-start gap-3">
+                  <LuPhone className="mt-0.5 shrink-0 text-muted" size={18} />
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted">Phone</dt>
+                    <dd className="break-words font-medium text-ink">
+                      {!contactUnlocked ? (
+                        <span className="inline-flex items-center gap-1.5 font-normal text-muted">
+                          <LuLock size={13} />
+                          Shown after you accept
+                        </span>
+                      ) : (
+                        job.customerPhone || (
+                          <span className="font-normal text-muted">Phone not provided</span>
+                        )
+                      )}
+                    </dd>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <LuCalendarClock className="mt-0.5 shrink-0 text-muted" size={18} />
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted">Scheduled</dt>
+                    <dd className="font-medium text-ink">{formatWhen(job.scheduledAt)}</dd>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <LuMapPin className="mt-0.5 shrink-0 text-muted" size={18} />
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted">Address</dt>
+                    <dd className="break-words font-medium text-ink">
+                      {job.address || (
+                        <span className="font-normal text-muted">Address not provided</span>
+                      )}
+                    </dd>
+                  </div>
+                </div>
+              </dl>
+
+              {/* Directions + call: the employee goes to the customer and phones if lost */}
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <ActionButton
+                  href={job.address ? mapUrl : ""}
+                  icon={LuNavigation}
+                  external
+                  primary
+                  disabled={!contactUnlocked || !job.address}
+                >
+                  Open in Maps
+                </ActionButton>
+
+                <ActionButton
+                  href={phoneHref}
+                  icon={LuPhone}
+                  disabled={!contactUnlocked || !job.customerPhone}
+                >
+                  Call customer
+                </ActionButton>
               </div>
+
+              {!contactUnlocked && (
+                <p className="mt-3 text-xs text-muted">
+                  Accept this job to open directions and call the customer.
+                </p>
+              )}
+
+              {contactUnlocked && !job.address && (
+                <p className="mt-3 text-xs text-muted">
+                  The address has not been provided yet. Contact admin.
+                </p>
+              )}
             </Card>
 
             <Card>
